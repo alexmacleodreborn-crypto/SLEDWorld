@@ -1,31 +1,29 @@
 def apply_event(a7do, event: dict):
     """
-    Apply a single event to A7DO.
-    Heartbeat is treated as a continuous background signal.
+    Apply a perceived event to A7DO.
+
+    This function assumes:
+    - The event has already passed through the world → perception gate
+    - All channels represent *what A7DO can perceive*, not objective reality
+    - No signal is invented here (especially heartbeats)
+
+    Event format (dict):
+    {
+        "type": str,
+        "place": str,
+        "intensity": float,
+        "channels": dict[str, float]
+    }
     """
 
     # -------------------------
-    # Extract event fields
+    # Extract event fields safely
     # -------------------------
 
     event_type = event.get("type", "unknown")
     place = event.get("place", "—")
     intensity = float(event.get("intensity", 0.0))
     channels = dict(event.get("channels", {}))
-
-    # -------------------------
-    # Inject internal heartbeat (always present)
-    # -------------------------
-
-    # Internal body rhythm – never gated off
-    channels.setdefault("internal_rhythm", 0.35)
-
-    # -------------------------
-    # Inject maternal heartbeat (prebirth / early)
-    # -------------------------
-
-    if getattr(a7do, "prebirth", False) or not a7do.birthed:
-        channels.setdefault("maternal_rhythm", 0.55)
 
     # -------------------------
     # Body-level processing
@@ -35,7 +33,7 @@ def apply_event(a7do, event: dict):
         a7do.body.apply_intensity(intensity)
 
     # -------------------------
-    # Familiarity imprinting
+    # Pre-symbolic familiarity imprint
     # -------------------------
 
     if hasattr(a7do, "familiarity"):
@@ -46,7 +44,7 @@ def apply_event(a7do, event: dict):
         )
 
     # -------------------------
-    # Internal observer log
+    # Observer-visible internal log
     # -------------------------
 
     dominant = "ambient"
@@ -58,7 +56,7 @@ def apply_event(a7do, event: dict):
     )
 
     # -------------------------
-    # Special hooks
+    # Special event annotations
     # -------------------------
 
     if event_type == "birth":
