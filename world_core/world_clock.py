@@ -1,37 +1,35 @@
-import time
-
+# world_core/world_clock.py
 
 class WorldClock:
     """
-    Continuous world clock.
-    Runs even when A7DO is asleep or unborn.
+    Canonical world time.
+    Always running, independent of A7DO awareness.
     """
 
     def __init__(self):
         self.running = False
-        self.last_tick = None
-        self.time_minutes = 0.0
+        self.minutes = 0.0  # world minutes since start
 
     def start(self):
         self.running = True
-        self.last_tick = time.time()
 
-    def tick(self, scale: float = 1.0):
-        """
-        Advances clock.
-        scale = minutes per real second
-        """
+    def tick(self, delta_hours: float):
         if not self.running:
             return
+        self.minutes += delta_hours * 60.0
 
-        now = time.time()
-        delta = now - self.last_tick
-        self.last_tick = now
-
-        self.time_minutes += delta * scale
+    @property
+    def days_elapsed(self) -> float:
+        return self.minutes / (60.0 * 24.0)
 
     def snapshot(self):
+        days = int(self.days_elapsed)
+        hours = int((self.minutes % (60 * 24)) // 60)
+        minutes = int(self.minutes % 60)
+
         return {
-            "world_time_minutes": round(self.time_minutes, 2),
-            "running": self.running,
+            "days": days,
+            "hours": hours,
+            "minutes": minutes,
+            "total_minutes": round(self.minutes, 2),
         }
