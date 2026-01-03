@@ -1,6 +1,6 @@
 # a7do_core/body_state.py
 
-from world_core.heartbeat_field import HeartbeatField
+from experience_layer.heartbeat_field import HeartbeatField
 
 
 class BodyState:
@@ -11,7 +11,11 @@ class BodyState:
 
     def __init__(self):
         # Fetal / newborn heart rate
-        self.heartbeat = HeartbeatField(bpm=130, noise=0.12, seed=3)
+        self.heartbeat = HeartbeatField(
+            bpm=130,
+            noise=0.12,
+            seed=3
+        )
         self.last_intensity = 0.0
 
     def tick(self, dt_seconds: float):
