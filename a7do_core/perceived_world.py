@@ -1,6 +1,7 @@
 class PerceivedWorld:
     def __init__(self):
-        self.current_place = None
+        self.current_place = "womb"  # default prebirth anchor
 
-    def update_place(self, place):
-        self.current_place = place
+    def observe(self, place: str):
+        if place:
+            self.current_place = place
