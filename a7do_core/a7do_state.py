@@ -1,30 +1,39 @@
 from .body_state import BodyState
 from .familiarity import Familiarity
-from .memory import MemoryStore
 
 class A7DOState:
     """
-    Internal cognitive substrate.
-    Does not control sleep/wake — only reflects state.
+    Core organism state.
+    No symbols, no language, no self-concept.
     """
 
     def __init__(self):
         self.body = BodyState()
         self.familiarity = Familiarity(gated=True)
-        self.memory = MemoryStore()
-
         self.birthed = False
         self.is_awake = False
-        self.perceived_place = "womb"
-
         self.internal_log = []
 
     def mark_birthed(self):
         self.birthed = True
-        self.is_awake = True
-        self.perceived_place = "hospital"
-        self.familiarity.unlock()
-        self.internal_log.append("birth: awareness unlocked")
+        self.internal_log.append("birth: high-intensity sensory onset")
 
-    def log(self, msg: str):
-        self.internal_log.append(msg)
+    def wake(self):
+        self.is_awake = True
+        self.internal_log.append("wake")
+
+    def sleep(self):
+        self.is_awake = False
+        self.internal_log.append("sleep")
+
+    # ---------- Observer visibility helpers ----------
+
+    def body_snapshot(self):
+        return self.body.snapshot()
+
+    def familiarity_snapshot(self):
+        return {
+            "gated": self.familiarity.gated,
+            "top_patterns": self.familiarity.top(5),
+            "last_pattern": self.familiarity.last_pattern,
+        }
