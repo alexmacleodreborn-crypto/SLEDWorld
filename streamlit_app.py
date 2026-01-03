@@ -1,3 +1,4 @@
+import time
 import streamlit as st
 
 from a7do_core.a7do_state import A7DOState
@@ -7,9 +8,9 @@ from world_core.world_clock import WorldClock
 
 st.set_page_config(page_title="SLED World – A7DO", layout="wide")
 
-# -------------------------
+# =========================
 # Session initialisation
-# -------------------------
+# =========================
 
 if "a7do" not in st.session_state:
     st.session_state.a7do = A7DOState()
@@ -23,45 +24,55 @@ if "gestation" not in st.session_state:
 if "cycle" not in st.session_state:
     st.session_state.cycle = DayCycle(st.session_state.a7do)
 
+if "last_tick" not in st.session_state:
+    st.session_state.last_tick = time.time()
+
 a7do = st.session_state.a7do
 clock = st.session_state.clock
 gestation = st.session_state.gestation
 cycle = st.session_state.cycle
 
-# -------------------------
-# WORLD TICK (CRITICAL)
-# -------------------------
+# =========================
+# TIME BOT (critical)
+# =========================
 
-clock.tick()              # ← THIS was missing / unsafe before
-gestation.tick(clock)
+now = time.time()
+elapsed = now - st.session_state.last_tick
 
-# -------------------------
-# Pre-birth sensory stream
-# -------------------------
+# 1 second real = 15 minutes world
+WORLD_MINUTES_PER_SECOND = 15
 
-if not a7do.birthed:
-    a7do.familiarity.observe(
-        place="womb",
-        channels={
-            "heartbeat": 0.6,
-            "pressure": 0.3,
-            "muffled_sound": 0.25,
-        },
-        intensity=0.2,
-    )
+if elapsed >= 1.0:
+    clock.seconds_elapsed += elapsed * WORLD_MINUTES_PER_SECOND * 60
+    st.session_state.last_tick = now
 
-# -------------------------
-# Auto birth transition
-# -------------------------
+    # gestation always advances
+    gestation.tick(clock)
 
-if not a7do.birthed and gestation.ready_for_birth():
-    cycle.ensure_birth()
-    gestation.mark_completed()
-    a7do.internal_log.append("transition: womb → birth")
+    # pre-birth sensory substrate
+    if not a7do.birthed:
+        a7do.familiarity.observe(
+            place="womb",
+            channels={
+                "heartbeat": 0.6,
+                "pressure": 0.3,
+                "muffled_sound": 0.25,
+            },
+            intensity=0.2,
+        )
 
-# -------------------------
-# Observer controls (post-birth only)
-# -------------------------
+    # auto birth trigger
+    if not a7do.birthed and gestation.ready_for_birth():
+        cycle.ensure_birth()
+        gestation.mark_completed()
+        a7do.internal_log.append("transition: womb → birth")
+
+    # force next tick
+    st.experimental_rerun()
+
+# =========================
+# Observer controls
+# =========================
 
 st.sidebar.header("Observer")
 
@@ -73,9 +84,9 @@ if a7do.birthed:
         cycle.sleep()
         cycle.next_day()
 
-# -------------------------
+# =========================
 # Display
-# -------------------------
+# =========================
 
 st.title("SLED World – A7DO Cognitive Emergence")
 
@@ -97,4 +108,4 @@ st.code("\n".join(a7do.internal_log[-20:]) if a7do.internal_log else "—")
 st.subheader("Familiarity (top patterns)")
 st.json(a7do.familiarity.top())
 
-st.caption("World time advances automatically on each refresh.")
+st.caption("⏱ Time bot active: 1s real = 15min world")
