@@ -1,83 +1,59 @@
 import streamlit as st
-import time
 
 from a7do_core.a7do_state import A7DOState
 from a7do_core.day_cycle import DayCycle
 from a7do_core.gestation_bridge import GestationBridge
 from world_core.world_clock import WorldClock
 
-# -------------------------------------------------
-# Safe rerun (works across Streamlit versions)
-# -------------------------------------------------
-
-def safe_rerun():
-    if hasattr(st, "rerun"):
-        st.rerun()
-    elif hasattr(st, "experimental_rerun"):
-        st.experimental_rerun()
-    else:
-        # Last-resort fallback: trigger state change
-        st.session_state["_rerun"] = time.time()
+st.set_page_config(page_title="SLED World – A7DO", layout="wide")
 
 # -------------------------------------------------
-# Streamlit setup
+# Session initialisation
 # -------------------------------------------------
-
-st.set_page_config(
-    page_title="SLED World – A7DO Cognitive Emergence",
-    layout="wide",
-)
-
-# -------------------------------------------------
-# Session initialisation (ONCE)
-# -------------------------------------------------
-
-if "a7do" not in st.session_state:
-    st.session_state.a7do = A7DOState()
 
 if "clock" not in st.session_state:
     st.session_state.clock = WorldClock()
     st.session_state.clock.start()
+
+if "a7do" not in st.session_state:
+    st.session_state.a7do = A7DOState()
 
 if "cycle" not in st.session_state:
     st.session_state.cycle = DayCycle(st.session_state.a7do)
 
 if "gestation" not in st.session_state:
     st.session_state.gestation = GestationBridge(
-        st.session_state.a7do,
-        st.session_state.clock,
+        a7do=st.session_state.a7do,
+        clock=st.session_state.clock,
     )
 
-a7do = st.session_state.a7do
 clock = st.session_state.clock
+a7do = st.session_state.a7do
 cycle = st.session_state.cycle
 gestation = st.session_state.gestation
 
 # -------------------------------------------------
-# WORLD TICK (ALWAYS RUNS)
+# WORLD TICK (ALWAYS RUNNING)
 # -------------------------------------------------
 
-# Advance world time
-clock.tick(0.25)  # 15 minutes per UI cycle
+clock.tick(minutes=15)
 
-# Pre-birth gestation & auto-birth
-gestation.tick()
-
-# Passive body decay
-a7do.body.tick()
+# Pre-birth automatic experience
+if not a7do.birthed:
+    gestation.tick()
 
 # -------------------------------------------------
-# OBSERVER CONTROLS
+# Observer Controls (POST-BIRTH ONLY)
 # -------------------------------------------------
 
 st.sidebar.header("Observer Control")
 
 if a7do.birthed:
     if not a7do.is_awake:
-        if st.sidebar.button("Wake A7DO"):
+        if st.sidebar.button("Wake"):
             cycle.wake()
     else:
-        if st.sidebar.button("Sleep A7DO"):
+        if st.sidebar.button("Sleep"):
             cycle.sleep()
             cycle.next_day()
 
@@ -96,20 +72,10 @@ st.write("Awake:", a7do.is_awake)
 st.write("Perceived Place:", a7do.perceived_place)
 
 st.subheader("Internal Log")
-if a7do.internal_log:
-    st.code("\n".join(a7do.internal_log[-40:]))
-else:
-    st.write("—")
+st.code("\n".join(a7do.internal_log[-25:]) if a7do.internal_log else "—")
 
-st.subheader("Familiarity Patterns")
+st.subheader("Familiarity Patterns (Pre-symbolic)")
 st.json(a7do.familiarity.top())
 
-st.subheader("Body State")
+st.subheader("Body Snapshot")
 st.json(a7do.body.snapshot())
-
-# -------------------------------------------------
-# 🔁 GUARANTEED WORLD LOOP
-# -------------------------------------------------
-
-time.sleep(1)
-safe_rerun()
