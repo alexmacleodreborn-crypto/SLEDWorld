@@ -1,3 +1,4 @@
+import time
 import streamlit as st
 
 from a7do_core.a7do_state import A7DOState
@@ -10,12 +11,12 @@ st.set_page_config(
     layout="wide"
 )
 
-# Auto refresh every second (REQUIRED)
-st.autorefresh(interval=1000, key="world_tick")
+# =========================================================
+# Session initialisation
+# =========================================================
 
-# -------------------------
-# Session init
-# -------------------------
+if "last_tick" not in st.session_state:
+    st.session_state.last_tick = time.time()
 
 if "clock" not in st.session_state:
     st.session_state.clock = WorldClock(acceleration_minutes_per_second=15)
@@ -38,33 +39,47 @@ mother = st.session_state.mother
 a7do = st.session_state.a7do
 gestation = st.session_state.gestation
 
-# -------------------------
-# World tick (ALWAYS)
-# -------------------------
+# =========================================================
+# WORLD TICK (REAL TIME → WORLD TIME)
+# =========================================================
 
-clock.tick()
-gestation.tick()
+now = time.time()
+delta = now - st.session_state.last_tick
 
-# -------------------------
+# advance world every ~1 second
+if delta >= 1.0:
+    st.session_state.last_tick = now
+
+    # world time moves
+    clock.tick()
+
+    # gestation progresses automatically
+    gestation.tick()
+
+    # force Streamlit to rerun (THIS is the refresh)
+    st.experimental_rerun()
+
+# =========================================================
 # UI
-# -------------------------
+# =========================================================
 
-st.title("SLED World – A7DO Cognitive Emergence")
+st.title("🧠 SLED World – A7DO Cognitive Emergence")
 
-st.subheader("World Time")
+st.subheader("🌍 World Time")
 st.json(clock.snapshot())
 
-st.subheader("Gestation")
+st.subheader("🤰 Gestation")
 st.write("Completed:", gestation.completed)
+st.write("Gestation days:", round(clock.days_elapsed, 2))
 
-st.subheader("Mother")
+st.subheader("👩 Mother (World Entity)")
 st.json(mother.snapshot(clock.world_minutes))
 
-st.subheader("A7DO Body")
+st.subheader("👶 A7DO Body (Internal)")
 st.json(a7do.body.snapshot(clock.world_minutes))
 
-st.subheader("Familiarity (top patterns)")
+st.subheader("🧠 Familiarity Patterns")
 st.json(a7do.familiarity.patterns)
 
-st.subheader("Internal Log")
+st.subheader("📜 Internal Log")
 st.code("\n".join(a7do.internal_log) if a7do.internal_log else "—")
