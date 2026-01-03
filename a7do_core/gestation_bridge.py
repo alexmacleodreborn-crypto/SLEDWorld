@@ -1,46 +1,43 @@
-from dataclasses import dataclass
-
-from world_core.mother_bot import MotherBot
-from a7do_core.event_applier import apply_event
+from dataclasses import dataclass, field
+from typing import Dict
+from a7do_core.body_state import BodyState
+from a7do_core.familiarity import Familiarity
+from world_core.world_clock import WorldClock
 
 
 @dataclass
 class GestationBridge:
     """
-    Bridges world-time maternal signals into A7DO pre-birth experience.
-    A7DO does NOT control this.
+    Handles pre-birth sensory exposure.
+    A7DO is not awake, but patterns are recorded at reduced weight.
     """
-    a7do: object
-    clock: object
 
-    mother: MotherBot = MotherBot()
-    gestation_days: int = 270
+    body: BodyState = field(default_factory=BodyState)
+    familiarity: Familiarity = field(default_factory=lambda: Familiarity(gated=True))
     elapsed_days: float = 0.0
-    completed: bool = False
 
-    def tick(self):
+    def tick(self, clock: WorldClock):
         """
-        Called every world tick.
-        Feeds muted sensory patterns to A7DO until birth threshold.
+        Advance gestation exposure based on world time.
         """
-        if self.completed:
-            return
+        self.elapsed_days = clock.days_elapsed
 
-        # Advance mother independently
-        self.mother.tick(minutes=15)
+        # Constant internal heartbeat (self)
+        self.body.apply_intensity(0.2)
 
-        # Advance gestation time
-        self.elapsed_days = self.clock.days_elapsed
+        # External maternal rhythm (filtered)
+        self.familiarity.observe(
+            place="womb",
+            channels={
+                "heartbeat": 0.9,
+                "motion": 0.4,
+                "muffled_sound": 0.3,
+            },
+            intensity=0.3,
+        )
 
-        # Pre-birth sensory exposure
-        snapshot = self.mother.prebirth_sensory_snapshot()
-        apply_event(self.a7do, snapshot)
-
-        # Birth trigger (automatic, not button-driven)
-        if self.elapsed_days >= self.gestation_days:
-            self.completed = True
-            self.a7do.mark_birthed()
-            self.a7do.unlock_awareness()
-            self.a7do.internal_log.append(
-                "birth: transition from womb to external world"
-            )
+    def ready_for_birth(self) -> bool:
+        """
+        Threshold for transition to birth.
+        """
+        return self.elapsed_days >= 180  # ~6 months symbolic threshold
