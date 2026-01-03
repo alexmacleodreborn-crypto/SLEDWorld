@@ -1,25 +1,20 @@
-# a7do_core/event_applier.py
-
-def apply_event(a7do, event: dict):
+def apply_event(a7do, event):
     """
-    Applies a sensory event to A7DO.
-    World meaning is NOT interpreted here.
+    Applies a sensory experience to A7DO.
     """
 
-    place = event.get("place", "—")
-    channels = event.get("channels", {})
-    intensity = float(event.get("intensity", 0.0))
+    a7do.perceived_place = event.place
 
-    # Body reacts first
-    a7do.body.apply_intensity(intensity)
+    # Apply body intensity
+    a7do.body.apply_intensity(event.intensity)
 
-    # Familiarity observes pattern (pre-symbolic)
+    # Familiarity observation
     a7do.familiarity.observe(
-        place=place,
-        channels=channels,
-        intensity=intensity
+        place=event.place,
+        channels=event.channels,
+        intensity=event.intensity
     )
 
-    a7do.internal_log.append(
-        f"experienced pattern place={place} channels={list(channels.keys())}"
+    a7do.log(
+        f"experienced pattern place={event.place} channels={list(event.channels.keys())}"
     )
