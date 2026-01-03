@@ -33,22 +33,28 @@ cycle = st.session_state.cycle
 # World tick (always runs)
 # -------------------------
 
-clock.tick(0.25)  # 15 minutes per refresh
+clock.tick(0.25)  # 15 minutes per UI refresh
 
-# Pre-birth sensory exposure
+# -------------------------
+# Gestation → Birth (AUTOMATIC)
+# -------------------------
+
 if not a7do.birthed:
     gestation.tick(clock)
 
+    if gestation.ready_for_birth():
+        cycle.ensure_birth()
+        a7do.internal_log.append(
+            "transition: gestation complete → birth event"
+        )
+
 # -------------------------
-# Controls
+# Observer controls (post-birth only)
 # -------------------------
 
 st.sidebar.header("Observer Control")
 
-if not a7do.birthed:
-    if st.sidebar.button("Trigger Birth"):
-        cycle.ensure_birth()
-else:
+if a7do.birthed:
     if st.sidebar.button("Wake"):
         cycle.wake()
 
@@ -72,9 +78,10 @@ st.write("Ready for birth:", gestation.ready_for_birth())
 st.subheader("A7DO State")
 st.write("Awake:", a7do.is_awake)
 st.write("Birthed:", a7do.birthed)
+st.write("Perceived place:", a7do.perceived_place)
 
 st.subheader("Internal Log")
 st.code("\n".join(a7do.internal_log) if a7do.internal_log else "—")
 
-st.subheader("Familiarity Patterns")
+st.subheader("Familiarity Patterns (pre-symbolic)")
 st.json(a7do.familiarity.top())
