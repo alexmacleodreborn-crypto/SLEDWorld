@@ -1,44 +1,37 @@
-import time
+from dataclasses import dataclass
 
-
+@dataclass
 class WorldClock:
-    def __init__(self):
-        self.started = False
-        self.last_time = None
-        self.seconds_elapsed = 0.0
+    day: int = 0
+    hour: int = 0
+    minute: int = 0
+    running: bool = False
 
     def start(self):
-        now = time.time()
-        self.started = True
-        self.last_time = now
+        self.running = True
 
-    def tick(self):
-        """
-        Safe, self-healing tick.
-        Works even if start() was never called.
-        """
-        now = time.time()
-
-        if not self.started:
-            self.started = True
-            self.last_time = now
+    def tick(self, minutes: int = 1):
+        """Advance world time by N minutes."""
+        if not self.running:
             return
 
-        if self.last_time is None:
-            self.last_time = now
-            return
+        self.minute += minutes
 
-        delta = now - self.last_time
-        self.last_time = now
-        self.seconds_elapsed += delta
+        while self.minute >= 60:
+            self.minute -= 60
+            self.hour += 1
+
+        while self.hour >= 24:
+            self.hour -= 24
+            self.day += 1
 
     @property
     def days_elapsed(self):
-        # 1 simulated day = 24 real hours
-        return self.seconds_elapsed / 86400.0
+        return self.day
 
     def snapshot(self):
         return {
-            "seconds_elapsed": round(self.seconds_elapsed, 2),
-            "days_elapsed": round(self.days_elapsed, 4),
+            "day": self.day,
+            "hour": self.hour,
+            "minute": self.minute,
         }
