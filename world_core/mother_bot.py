@@ -1,26 +1,33 @@
+# sledworld/world_core/mother_bot.py
+
+from world_core.heartbeat_field import HeartbeatField
+
 class MotherBot:
     """
-    Mother as a physiological field.
-    No cognition, no memory.
+    Mother biological presence.
+    Provides external sensory coupling during gestation.
     """
 
     def __init__(self):
-        self.heartbeat_phase = 0.0
-        self.heartbeat_rate = 1.0
-        self.stress = 0.2
-        self.activity = 0.3
+        # Adult resting heart rate
+        self.heartbeat = HeartbeatField(bpm=80, noise=0.08, seed=11)
 
-    def tick(self, dt: float):
-        self.heartbeat_phase = (
-            self.heartbeat_phase + dt * self.heartbeat_rate
-        ) % 1.0
+    def tick(self, dt_seconds: float) -> dict:
+        """
+        Advance mother state.
+        Returns sensory snapshot available to fetus.
+        """
+        hb = self.heartbeat.tick(dt_seconds)
 
-        # slow stress drift
-        self.stress = max(0.0, min(1.0, self.stress + dt * 0.002))
+        return {
+            "heartbeat": hb,
+            "muffled_sound": hb * 0.6,
+            "pressure": 0.4,
+            "warmth": 0.7,
+        }
 
     def snapshot(self):
         return {
-            "heartbeat_phase": round(self.heartbeat_phase, 3),
-            "stress": round(self.stress, 3),
-            "activity": round(self.activity, 3),
+            "role": "mother",
+            "heartbeat_bpm": self.heartbeat.bpm,
         }
