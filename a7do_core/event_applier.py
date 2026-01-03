@@ -1,28 +1,65 @@
-def apply_event(a7do, event):
+def apply_event(a7do, event: dict):
     """
-    Applies a single experience event to A7DO.
-    Heartbeats run regardless of sleep.
+    Apply a single event to A7DO.
+    Heartbeat is treated as a continuous background signal.
     """
 
-    # 🫀 Internal heartbeat always runs
-    internal_pulse = a7do.body.internal_heartbeat()
+    # -------------------------
+    # Extract event fields
+    # -------------------------
 
-    # Somatic intensity from event
-    a7do.body.apply_intensity(event.intensity)
+    event_type = event.get("type", "unknown")
+    place = event.get("place", "—")
+    intensity = float(event.get("intensity", 0.0))
+    channels = dict(event.get("channels", {}))
 
-    # Reflexive movement only if awake
-    if a7do.is_awake and event.intensity > 0.1:
-        region, _ = a7do.body.reflex_move()
-        a7do.log(f"reflex movement: {region}")
+    # -------------------------
+    # Inject internal heartbeat (always present)
+    # -------------------------
 
-    # Familiarity (external world)
-    a7do.familiarity.observe(
-        place=event.payload.get("place", "—"),
-        channels=event.payload.get("channels", {}),
-        intensity=event.intensity,
+    # Internal body rhythm – never gated off
+    channels.setdefault("internal_rhythm", 0.35)
+
+    # -------------------------
+    # Inject maternal heartbeat (prebirth / early)
+    # -------------------------
+
+    if getattr(a7do, "prebirth", False) or not a7do.birthed:
+        channels.setdefault("maternal_rhythm", 0.55)
+
+    # -------------------------
+    # Body-level processing
+    # -------------------------
+
+    if hasattr(a7do, "body"):
+        a7do.body.apply_intensity(intensity)
+
+    # -------------------------
+    # Familiarity imprinting
+    # -------------------------
+
+    if hasattr(a7do, "familiarity"):
+        a7do.familiarity.observe(
+            place=place,
+            channels=channels,
+            intensity=intensity,
+        )
+
+    # -------------------------
+    # Internal observer log
+    # -------------------------
+
+    dominant = "ambient"
+    if channels:
+        dominant = max(channels.items(), key=lambda kv: kv[1])[0]
+
+    a7do.internal_log.append(
+        f"experienced pattern={dominant} place={place}"
     )
 
-    # Observer-visible phenomenology
-    a7do.log(
-        f"experienced pattern={a7do.familiarity.last_pattern}"
-    )
+    # -------------------------
+    # Special hooks
+    # -------------------------
+
+    if event_type == "birth":
+        a7do.internal_log.append("high-intensity sensory onset")
