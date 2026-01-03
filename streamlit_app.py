@@ -8,7 +8,7 @@ from world_core.world_clock import WorldClock
 st.set_page_config(page_title="SLED World – A7DO", layout="wide")
 
 # -------------------------
-# Session initialisation
+# Session init
 # -------------------------
 
 if "a7do" not in st.session_state:
@@ -30,29 +30,22 @@ gestation = st.session_state.gestation
 cycle = st.session_state.cycle
 
 # -------------------------
-# World tick (always runs)
+# WORLD TICK (REAL TIME)
 # -------------------------
 
-clock.tick(0.25)  # 15 minutes per UI refresh
+clock.tick()
+gestation.tick(clock)
+
+if not a7do.birthed and gestation.ready_for_birth():
+    cycle.ensure_birth()
+    gestation.mark_completed()
+    a7do.internal_log.append("auto-birth: gestation threshold reached")
 
 # -------------------------
-# Gestation → Birth (AUTOMATIC)
+# Controls (post-birth)
 # -------------------------
 
-if not a7do.birthed:
-    gestation.tick(clock)
-
-    if gestation.ready_for_birth():
-        cycle.ensure_birth()
-        a7do.internal_log.append(
-            "transition: gestation complete → birth event"
-        )
-
-# -------------------------
-# Observer controls (post-birth only)
-# -------------------------
-
-st.sidebar.header("Observer Control")
+st.sidebar.header("Observer")
 
 if a7do.birthed:
     if st.sidebar.button("Wake"):
@@ -60,7 +53,7 @@ if a7do.birthed:
 
     if st.sidebar.button("Sleep"):
         cycle.sleep()
-        cycle.next_day()
+        cycle.day += 1
 
 # -------------------------
 # Display
@@ -73,15 +66,21 @@ st.json(clock.snapshot())
 
 st.subheader("Gestation")
 st.write("Elapsed days:", round(gestation.elapsed_days, 2))
-st.write("Ready for birth:", gestation.ready_for_birth())
+st.write("Ready:", gestation.ready_for_birth())
 
 st.subheader("A7DO State")
-st.write("Awake:", a7do.is_awake)
 st.write("Birthed:", a7do.birthed)
+st.write("Awake:", a7do.is_awake)
 st.write("Perceived place:", a7do.perceived_place)
 
 st.subheader("Internal Log")
-st.code("\n".join(a7do.internal_log) if a7do.internal_log else "—")
+st.code("\n".join(a7do.internal_log[-20:]) if a7do.internal_log else "—")
 
-st.subheader("Familiarity Patterns (pre-symbolic)")
+st.subheader("Familiarity")
 st.json(a7do.familiarity.top())
+
+# -------------------------
+# AUTO REFRESH (ESSENTIAL)
+# -------------------------
+
+st.caption("⏱ World runs on real time. Refresh page or interact to advance.")
