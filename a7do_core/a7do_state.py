@@ -7,17 +7,18 @@ from .memory import MemoryStore
 class A7DOState:
     """
     Internal cognitive state of A7DO.
-    This is NOT the world. This is perception + body + familiarity.
     """
 
     def __init__(self):
-        # Ontological state
+        # Ontological flags
         self.birthed = False
         self.is_awake = False
 
         # Perception mode (not location)
-        # womb → hospital → home
-        self.perception_mode = "womb"
+        self.perception_mode = "womb"  # locked pre-birth
+
+        # Time counters
+        self.gestation_cycles = 0  # pre-birth wake/sleep cycles
 
         # Core subsystems
         self.body = BodyState()
@@ -27,27 +28,35 @@ class A7DOState:
         # Observer-visible log
         self.internal_log: list[str] = []
 
-    # ---------- State transitions ----------
+    # ---------- Pre-birth physiology ----------
+
+    def prebirth_wake(self):
+        if self.birthed:
+            return
+        self.is_awake = True
+        self.internal_log.append("prebirth: wake")
+
+    def prebirth_sleep(self):
+        if self.birthed:
+            return
+        self.is_awake = False
+        self.gestation_cycles += 1
+
+        replayed = self.familiarity.replay()
+        self.internal_log.append("prebirth: sleep (muted)")
+        for p in replayed:
+            self.internal_log.append(f"prebirth replay: {p}")
+
+    # ---------- Birth transition ----------
 
     def unlock_birth(self):
-        """Internal awareness transition at birth."""
+        """
+        One-way awareness transition.
+        """
         self.birthed = True
+        self.is_awake = True
+
         self.perception_mode = "hospital"
         self.familiarity.unlock()
+
         self.internal_log.append("birth: awareness unlocked")
-
-    def wake(self):
-        self.is_awake = True
-        self.internal_log.append("wake")
-
-    def sleep(self):
-        self.is_awake = False
-        replayed = self.familiarity.replay()
-        self.internal_log.append("sleep: replay and consolidation")
-        for p in replayed:
-            self.internal_log.append(f"replay: {p}")
-
-    def move_to(self, mode: str):
-        """Observer-controlled perceptual transition."""
-        self.perception_mode = mode
-        self.internal_log.append(f"perception → {mode}")
