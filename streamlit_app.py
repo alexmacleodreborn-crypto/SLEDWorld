@@ -8,7 +8,7 @@ from world_core.world_clock import WorldClock
 st.set_page_config(page_title="SLED World – A7DO", layout="wide")
 
 # -------------------------
-# Session init
+# Session initialisation
 # -------------------------
 
 if "a7do" not in st.session_state:
@@ -16,7 +16,6 @@ if "a7do" not in st.session_state:
 
 if "clock" not in st.session_state:
     st.session_state.clock = WorldClock()
-    st.session_state.clock.start()
 
 if "gestation" not in st.session_state:
     st.session_state.gestation = GestationBridge()
@@ -30,21 +29,24 @@ gestation = st.session_state.gestation
 cycle = st.session_state.cycle
 
 # -------------------------
-# WORLD TICK (always)
+# WORLD TICK (CRITICAL)
 # -------------------------
 
-clock.tick()
+clock.tick()              # ← THIS was missing / unsafe before
 gestation.tick(clock)
 
 # -------------------------
-# Pre-birth experience
+# Pre-birth sensory stream
 # -------------------------
 
 if not a7do.birthed:
-    # womb ambience runs continuously
     a7do.familiarity.observe(
         place="womb",
-        channels={"heartbeat": 0.6, "muffled_sound": 0.3, "pressure": 0.2},
+        channels={
+            "heartbeat": 0.6,
+            "pressure": 0.3,
+            "muffled_sound": 0.25,
+        },
         intensity=0.2,
     )
 
@@ -56,6 +58,20 @@ if not a7do.birthed and gestation.ready_for_birth():
     cycle.ensure_birth()
     gestation.mark_completed()
     a7do.internal_log.append("transition: womb → birth")
+
+# -------------------------
+# Observer controls (post-birth only)
+# -------------------------
+
+st.sidebar.header("Observer")
+
+if a7do.birthed:
+    if st.sidebar.button("Wake"):
+        cycle.wake()
+
+    if st.sidebar.button("Sleep"):
+        cycle.sleep()
+        cycle.next_day()
 
 # -------------------------
 # Display
@@ -81,4 +97,4 @@ st.code("\n".join(a7do.internal_log[-20:]) if a7do.internal_log else "—")
 st.subheader("Familiarity (top patterns)")
 st.json(a7do.familiarity.top())
 
-st.caption("World time advances on each refresh or interaction.")
+st.caption("World time advances automatically on each refresh.")
