@@ -1,61 +1,53 @@
-from a7do_core.body_state import BodyState
-from a7do_core.familiarity import Familiarity
-from a7do_core.memory import MemoryStore
+# a7do_core/a7do_state.py
 
+from .body_state import BodyState
+from .familiarity import Familiarity
+from .memory import MemoryStore
 
 class A7DOState:
     """
-    Core internal state of A7DO.
-    Represents the organism, not the world.
+    Internal cognitive state of A7DO.
+    This is NOT the world. This is perception + body + familiarity.
     """
 
     def __init__(self):
-        # -------------------------
-        # Lifecycle flags
-        # -------------------------
-        self.prebirth = True
+        # Ontological state
         self.birthed = False
         self.is_awake = False
 
-        # -------------------------
-        # Internal systems
-        # -------------------------
+        # Perception mode (not location)
+        # womb → hospital → home
+        self.perception_mode = "womb"
+
+        # Core subsystems
         self.body = BodyState()
         self.familiarity = Familiarity(gated=True)
         self.memory = MemoryStore()
 
-        # -------------------------
         # Observer-visible log
-        # -------------------------
         self.internal_log: list[str] = []
 
-    # -------------------------
-    # Lifecycle transitions
-    # -------------------------
+    # ---------- State transitions ----------
 
-    def unlock_awareness(self):
-        """
-        Transition from pre-birth to aware organism.
-        Called exactly once at birth.
-        """
-        if self.birthed:
-            return
-
-        self.prebirth = False
+    def unlock_birth(self):
+        """Internal awareness transition at birth."""
         self.birthed = True
-
-        # Lift sensory gating
+        self.perception_mode = "hospital"
         self.familiarity.unlock()
+        self.internal_log.append("birth: awareness unlocked")
 
-        self.internal_log.append("awareness unlocked")
+    def wake(self):
+        self.is_awake = True
+        self.internal_log.append("wake")
 
-    # -------------------------
-    # Convenience helpers
-    # -------------------------
+    def sleep(self):
+        self.is_awake = False
+        replayed = self.familiarity.replay()
+        self.internal_log.append("sleep: replay and consolidation")
+        for p in replayed:
+            self.internal_log.append(f"replay: {p}")
 
-    def snapshot(self):
-        return {
-            "prebirth": self.prebirth,
-            "birthed": self.birthed,
-            "awake": self.is_awake,
-        }
+    def move_to(self, mode: str):
+        """Observer-controlled perceptual transition."""
+        self.perception_mode = mode
+        self.internal_log.append(f"perception → {mode}")
