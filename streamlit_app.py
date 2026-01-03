@@ -1,4 +1,8 @@
 import streamlit as st
+import threading
+import time
+
+from streamlit.runtime.scriptrunner import add_script_run_ctx
 
 from a7do_core.a7do_state import A7DOState
 from a7do_core.day_cycle import DayCycle
@@ -14,9 +18,27 @@ st.set_page_config(
     layout="wide",
 )
 
-# 🔁 Auto-refresh: keeps world time running
-# 1000 ms = 1 second real time
-st.autorefresh(interval=1000, key="world_tick")
+# -------------------------------------------------
+# AUTO RERUN LOOP (world time driver)
+# -------------------------------------------------
+
+def auto_rerun(interval_sec: float = 1.0):
+    def _loop():
+        while True:
+            time.sleep(interval_sec)
+            try:
+                st.experimental_rerun()
+            except Exception:
+                pass
+
+    if "auto_rerun_started" not in st.session_state:
+        t = threading.Thread(target=_loop, daemon=True)
+        add_script_run_ctx(t)
+        t.start()
+        st.session_state.auto_rerun_started = True
+
+# Start automatic reruns (1 second real time)
+auto_rerun(interval_sec=1.0)
 
 # -------------------------------------------------
 # Session initialisation (ONCE)
@@ -44,17 +66,17 @@ cycle = st.session_state.cycle
 gestation = st.session_state.gestation
 
 # -------------------------------------------------
-# WORLD TICK (always runs)
+# WORLD TICK (ALWAYS RUNS)
 # -------------------------------------------------
 
-# Each UI refresh advances world time
-# 0.25 hours = 15 world minutes
+# Advance world time
+# 0.25 hours = 15 world minutes per rerun
 clock.tick(0.25)
 
-# Pre-birth / gestation / auto-birth bridge
+# Pre-birth gestation & auto-birth
 gestation.tick()
 
-# Passive body decay (always safe)
+# Body passive decay (safe always)
 a7do.body.tick()
 
 # -------------------------------------------------
@@ -62,9 +84,8 @@ a7do.body.tick()
 # -------------------------------------------------
 
 st.sidebar.header("Observer Control")
-
-st.sidebar.write("• World time always runs")
-st.sidebar.write("• Biology cannot be forced")
+st.sidebar.write("World time always runs")
+st.sidebar.write("Biology cannot be forced")
 
 if a7do.birthed:
     if not a7do.is_awake:
