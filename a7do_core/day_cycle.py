@@ -1,12 +1,9 @@
-# a7do_core/day_cycle.py
-
 from .event_applier import apply_event
-
-GESTATION_LIMIT = 180  # abstracted ~6 months
+from .experience_event import ExperienceEvent
 
 class DayCycle:
     """
-    Controls wake/sleep cycles and birth allowance.
+    Observer-driven developmental cycle controller.
     """
 
     def __init__(self, a7do):
@@ -14,63 +11,36 @@ class DayCycle:
         self.day = 0
         self.has_birthed = False
 
-    # ---------- Pre-birth cycles ----------
-
-    def prebirth_cycle(self):
-        if self.has_birthed:
-            return
-
-        self.a7do.prebirth_wake()
-
-        # Ambient womb sensory background
-        womb_event = {
-            "place": "womb",
-            "channels": {
-                "heartbeat": 0.8,
-                "pressure": 0.6,
-                "sound": 0.4
-            },
-            "intensity": 0.3
-        }
-        apply_event(self.a7do, womb_event)
-
-        self.a7do.prebirth_sleep()
-
-        # Automatic birth allowance
-        if self.a7do.gestation_cycles >= GESTATION_LIMIT:
-            self.ensure_birth()
-
-    # ---------- Birth ----------
-
     def ensure_birth(self):
         if self.has_birthed:
             return
 
-        self.has_birthed = True
-
-        birth_event = {
-            "place": "womb",
-            "channels": {
+        birth_event = ExperienceEvent(
+            place="hospital",
+            channels={
                 "pressure": 1.0,
-                "sound": 1.0,
-                "motion": 1.0,
-                "light": 0.3
+                "sound": 0.9,
+                "light": 0.7,
+                "motion": 0.8
             },
-            "intensity": 1.0
-        }
+            intensity=1.0
+        )
 
         apply_event(self.a7do, birth_event)
-        self.a7do.unlock_birth()
-
-    # ---------- Post-birth ----------
+        self.a7do.mark_birthed()
+        self.has_birthed = True
 
     def wake(self):
         self.a7do.is_awake = True
-        self.a7do.internal_log.append("wake")
+        self.a7do.log(f"day {self.day}: wake")
 
     def sleep(self):
-        self.a7do.sleep()
+        self.a7do.is_awake = False
+        replayed = self.a7do.familiarity.replay()
+        self.a7do.log("sleep: replay and consolidation")
+        for pat in replayed:
+            self.a7do.log(f"sleep replay: {pat}")
 
     def next_day(self):
         self.day += 1
-        self.a7do.internal_log.append(f"day {self.day} begins")
+        self.a7do.log(f"day {self.day} begins")
