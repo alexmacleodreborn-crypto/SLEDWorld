@@ -1,27 +1,23 @@
-# world_core/world_clock.py
 import time
 
 class WorldClock:
-    def __init__(self, acceleration: float = 15.0):
-        """
-        acceleration = world minutes per real second
-        e.g. 15 → 1 real second = 15 world minutes
-        """
-        self.acceleration = acceleration
-        self.start_real = time.time()
-        self.last_real = self.start_real
+    """
+    Continuous real-time-driven world clock.
+    """
 
+    def __init__(self, acceleration_minutes_per_second: float = 15.0):
+        self.acceleration = acceleration_minutes_per_second
+        self.last_real = time.time()
         self.world_minutes = 0.0
 
     def tick(self):
         now = time.time()
-        delta_real = now - self.last_real
+        delta = now - self.last_real
         self.last_real = now
-
-        self.world_minutes += delta_real * self.acceleration
+        self.world_minutes += delta * self.acceleration
 
     @property
-    def days_elapsed(self):
+    def days_elapsed(self) -> float:
         return self.world_minutes / (60 * 24)
 
     def snapshot(self):
