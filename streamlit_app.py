@@ -108,7 +108,7 @@ st.json({
 
 st.subheader("👩 Mother (World Entity)")
 
-st.json(mother.snapshot(clock.world_datetime))
+st.json(mother.snapshot())
 
 # ---------------------------------------------------------
 # A7DO Internal State (no time)
