@@ -1,33 +1,33 @@
-# world_core/mother_bot.py
-
 from experience_layer.heartbeat_field import HeartbeatField
 
 
 class MotherBot:
     """
-    Mother biological presence.
-    External heartbeat + sensory field.
+    Mother biological agent.
+    Exists in world time, independent of A7DO awareness.
     """
 
     def __init__(self):
+        # Adult resting heartbeat ~70–80 bpm
         self.heartbeat = HeartbeatField(
-            bpm=80,
-            noise=0.08,
-            seed=11
+            bpm=78,
+            amplitude=1.0,
+            source="mother"
         )
 
-    def tick(self, dt_seconds: float) -> dict:
-        hb = self.heartbeat.tick(dt_seconds)
-
-        return {
-            "heartbeat": hb,
-            "muffled_sound": hb * 0.6,
-            "pressure": 0.4,
-            "warmth": 0.7,
+        self.state = {
+            "location": "home",
+            "activity": "resting",
         }
+
+    def tick(self, dt_seconds: float):
+        """
+        Advance mother physiology in world time.
+        """
+        self.heartbeat.tick(dt_seconds)
 
     def snapshot(self):
         return {
-            "role": "mother",
-            "heartbeat_bpm": self.heartbeat.bpm,
+            "heartbeat": self.heartbeat.snapshot(),
+            "state": self.state,
         }
