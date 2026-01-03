@@ -94,12 +94,12 @@ st.json({
 # Gestation state
 # ---------------------------------------------------------
 
-st.subheader("🤰 Gestation")
+st.subheader("🤰 Gestation (Observer)")
 
 st.json({
-    "phase": gestation.phase,
-    "completed": gestation.completed,
-    "elapsed_days": round(clock.world_day_index + clock.world_time.hour / 24, 3),
+    "gestation_completed": gestation.completed,
+    "a7do_phase": a7do.phase,
+    "world_days_elapsed": round(clock.world_day_index + clock.world_time.hour / 24, 3),
 })
 
 # ---------------------------------------------------------
