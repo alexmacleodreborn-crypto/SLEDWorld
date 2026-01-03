@@ -1,23 +1,22 @@
-from .experience_event import ExperienceEvent
-from world_core.intersection_gate import sample_world
-
-
-def sensory_drip(world, focus_place: str):
+def sensory_drip(snapshot, *, base_intensity=0.15):
     """
-    Low-intensity continuous sensory exposure.
-    This is NOT an 'event' like birth or travel.
-    It is background existence.
+    Continuous low-level sensory input.
+    Used for prebirth, sleep, and passive awareness.
     """
-    snapshot = sample_world(world, focus_place)
 
-    return ExperienceEvent(
-        source="world:drip",
-        payload={
-            "place": snapshot["place"],
-            "channels": {
-                "noise": 0.3,
-                "light": snapshot["light"] * 0.5,
-            },
+    channels = snapshot.get("channels", {})
+
+    # Safe extraction
+    ambient = float(channels.get("ambient", 0.2))
+    light = float(channels.get("light", 0.0))
+    maternal_hb = float(channels.get("maternal_heartbeat", 0.0))
+
+    return {
+        "place": snapshot.get("place", "—"),
+        "channels": {
+            "ambient": ambient * 0.6,
+            "light": light * 0.5,
+            "maternal_heartbeat": maternal_hb,
         },
-        intensity=0.25,
-    )
+        "intensity": base_intensity,
+    }
