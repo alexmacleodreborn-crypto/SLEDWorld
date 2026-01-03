@@ -1,33 +1,14 @@
 from experience_layer.heartbeat_field import HeartbeatField
 
-
 class MotherBot:
     """
-    Mother biological agent.
-    Exists in world time, independent of A7DO awareness.
+    Mother exists continuously in world time.
     """
 
     def __init__(self):
-        # Adult resting heartbeat ~70–80 bpm
-        self.heartbeat = HeartbeatField(
-            bpm=78,
-            amplitude=1.0,
-            source="mother"
-        )
+        self.heartbeat = HeartbeatField(bpm=80)
 
-        self.state = {
-            "location": "home",
-            "activity": "resting",
-        }
-
-    def tick(self, dt_seconds: float):
-        """
-        Advance mother physiology in world time.
-        """
-        self.heartbeat.tick(dt_seconds)
-
-    def snapshot(self):
+    def snapshot(self, world_minutes: float):
         return {
-            "heartbeat": self.heartbeat.snapshot(),
-            "state": self.state,
+            "heartbeat": self.heartbeat.sample(world_minutes)
         }
