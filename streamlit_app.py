@@ -3,23 +3,28 @@ import streamlit as st
 
 from a7do_core.a7do_state import A7DOState
 from a7do_core.gestation_bridge import GestationBridge
+
 from world_core.world_clock import WorldClock
 from world_core.mother_bot import MotherBot
 
+# =========================================================
+# Streamlit setup
+# =========================================================
+
 st.set_page_config(
-    page_title="SLED World – A7DO Cognitive Emergence",
+    page_title="SLED World — Observer",
     layout="wide"
 )
 
 # =========================================================
-# Session initialisation
+# Session state initialisation
 # =========================================================
 
-if "last_tick" not in st.session_state:
-    st.session_state.last_tick = time.time()
+if "last_real_tick" not in st.session_state:
+    st.session_state.last_real_tick = time.time()
 
-if "clock" not in st.session_state:
-    st.session_state.clock = WorldClock(acceleration_minutes_per_second=15)
+if "world_clock" not in st.session_state:
+    st.session_state.world_clock = WorldClock(acceleration=1000.0)
 
 if "mother" not in st.session_state:
     st.session_state.mother = MotherBot()
@@ -31,55 +36,108 @@ if "gestation" not in st.session_state:
     st.session_state.gestation = GestationBridge(
         a7do=st.session_state.a7do,
         mother=st.session_state.mother,
-        clock=st.session_state.clock,
+        clock=st.session_state.world_clock,
     )
 
-clock = st.session_state.clock
+clock = st.session_state.world_clock
 mother = st.session_state.mother
 a7do = st.session_state.a7do
 gestation = st.session_state.gestation
 
 # =========================================================
-# WORLD TICK (REAL TIME → WORLD TIME)
+# WORLD TICK LOOP (authoritative time)
 # =========================================================
 
 now = time.time()
-delta = now - st.session_state.last_tick
+delta = now - st.session_state.last_real_tick
 
-# advance world every ~1 second
+# Advance world every real second
 if delta >= 1.0:
-    st.session_state.last_tick = now
+    st.session_state.last_real_tick = now
 
-    # world time moves
-    clock.tick()
+    # Advance world time
+    clock.tick(real_seconds=delta)
 
-    # gestation progresses automatically
+    # Advance gestation & prebirth experience
     gestation.tick()
 
-    # force Streamlit to rerun (THIS is the refresh)
+    # Force Streamlit refresh
     st.experimental_rerun()
 
 # =========================================================
-# UI
+# OBSERVER DISPLAY
 # =========================================================
 
-st.title("🧠 SLED World – A7DO Cognitive Emergence")
+st.title("🧭 SLED World — Observer View")
 
-st.subheader("🌍 World Time")
-st.json(clock.snapshot())
+st.markdown(
+    """
+This panel shows **objective world reality**.  
+A7DO does **not** have access to this information.
+"""
+)
+
+# ---------------------------------------------------------
+# World Time (objective)
+# ---------------------------------------------------------
+
+st.subheader("🌍 World Time (Objective)")
+
+st.json({
+    "datetime": clock.world_datetime.isoformat(),
+    "day_index": clock.world_day_index,
+    "time_of_day": clock.world_time_of_day,
+    "acceleration": clock.acceleration,
+})
+
+# ---------------------------------------------------------
+# Gestation state
+# ---------------------------------------------------------
 
 st.subheader("🤰 Gestation")
-st.write("Completed:", gestation.completed)
-st.write("Gestation days:", round(clock.days_elapsed, 2))
+
+st.json({
+    "phase": gestation.phase,
+    "completed": gestation.completed,
+    "elapsed_days": round(clock.world_day_index + clock.world_time.hour / 24, 3),
+})
+
+# ---------------------------------------------------------
+# Mother (world entity)
+# ---------------------------------------------------------
 
 st.subheader("👩 Mother (World Entity)")
-st.json(mother.snapshot(clock.world_minutes))
 
-st.subheader("👶 A7DO Body (Internal)")
-st.json(a7do.body.snapshot(clock.world_minutes))
+st.json(mother.snapshot(clock.world_datetime))
 
-st.subheader("🧠 Familiarity Patterns")
-st.json(a7do.familiarity.patterns)
+# ---------------------------------------------------------
+# A7DO Internal State (no time)
+# ---------------------------------------------------------
+
+st.subheader("👶 A7DO Internal State")
+
+st.json({
+    "phase": a7do.phase,
+    "aware": a7do.aware,
+    "heartbeat_bpm": a7do.body.heartbeat.bpm,
+})
+
+# ---------------------------------------------------------
+# Familiarity (pre-symbolic)
+# ---------------------------------------------------------
+
+st.subheader("🧠 Familiarity Patterns (Pre-Symbolic)")
+
+st.json(a7do.familiarity.top())
+
+# ---------------------------------------------------------
+# Internal log (observer-visible only)
+# ---------------------------------------------------------
 
 st.subheader("📜 Internal Log")
-st.code("\n".join(a7do.internal_log) if a7do.internal_log else "—")
+
+st.code(
+    "\n".join(a7do.internal_log[-25:])
+    if a7do.internal_log
+    else "—"
+)
