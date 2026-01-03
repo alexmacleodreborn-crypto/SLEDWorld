@@ -1,42 +1,26 @@
-from .body_state import BodyState
-from .perceived_world import PerceivedWorld
-from .familiarity import Familiarity
-from .internal_log import InternalLog
-
 class A7DOState:
-    """
-    Proto-being exists prebirth.
-    Birth is a transition unlock, not creation.
-    """
-
     def __init__(self):
-        self.exists = True
         self.birthed = False
-        self.day = 0
-        self.awake = False
+        self.is_awake = True
 
-        self.body = BodyState(prebirth=True)
-        self.world = PerceivedWorld()
-        self.familiarity = Familiarity(gated=True)
-        self.log = InternalLog()
+        self.body = BodyState()
+        self.familiarity = FamiliarityTracker()
+        self.memory = MemoryStore()
 
-        self.log.add("proto-state: pre-birth continuity")
+        # ✅ ADD THIS
+        self.internal_log: list[str] = []
 
     def mark_birth(self):
-        """
-        Transition: world anchoring threshold.
-        """
-        if self.birthed:
-            return
         self.birthed = True
-        self.awake = True
-        self.day = 0
+        self.internal_log.append("birth: sensory onset")
 
-        self.body.unlock_birth_transition()
-        self.familiarity.unlock()
+    def log(self, message: str):
+        self.internal_log.append(message)
 
-        self.log.add("birth: transition threshold crossed (gain unlocked)")
+    def sleep(self):
+        self.is_awake = False
+        self.internal_log.append("sleep: replay and consolidation")
 
-    def next_day(self):
-        self.day += 1
-        self.log.add(f"day {self.day} begins")
+    def wake(self):
+        self.is_awake = True
+        self.internal_log.append("wake: awareness resumes")
