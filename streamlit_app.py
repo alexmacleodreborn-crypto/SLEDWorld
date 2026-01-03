@@ -70,11 +70,13 @@ else:
 
 st.sidebar.divider()
 
-# Place toggle (for quick testing)
-st.sidebar.subheader("Place (World)")
-place = st.sidebar.selectbox("Current place", ["hospital", "home"], index=0 if world.current_place == "hospital" else 1)
-world.set_place(place)
+place = st.sidebar.selectbox(
+    "A7DO perceived place",
+    ["hospital", "home"],
+    index=0 if a7do.perceived_place == "hospital" else 1
+)
 
+a7do.perceived_place = place
 
 # -------------------------
 # Main display
