@@ -1,105 +1,73 @@
 import streamlit as st
 
-# ---------- Core imports ----------
 from a7do_core.a7do_state import A7DOState
 from a7do_core.day_cycle import DayCycle
-from world_frame.world_controller import WorldController
 
-# ---------- Page config ----------
-st.set_page_config(
-    page_title="SLED World – A7DO Cognitive Emergence",
-    layout="wide",
-)
+st.set_page_config(page_title="SLED World – A7DO Prebirth", layout="wide")
+st.title("🧠 SLED World – A7DO Pre-Birth → Birth → Post-Birth")
 
-st.title("🧠 SLED World – A7DO Cognitive Emergence")
-
-# ---------- Session State ----------
+# Session state
 if "a7do" not in st.session_state:
     st.session_state.a7do = A7DOState()
-
-if "world" not in st.session_state:
-    st.session_state.world = WorldController()
-
 if "cycle" not in st.session_state:
-    st.session_state.cycle = DayCycle(
-        a7do=st.session_state.a7do,
-        world=st.session_state.world,
-    )
+    st.session_state.cycle = DayCycle(st.session_state.a7do)
 
 a7do = st.session_state.a7do
-world = st.session_state.world
 cycle = st.session_state.cycle
 
-# ---------- Layout ----------
-col_control, col_state, col_log = st.columns([1.2, 1.2, 2.2])
+c1, c2, c3 = st.columns([1.2, 1.2, 2.2])
 
-# =====================================================================
-# CONTROL PANEL
-# =====================================================================
-with col_control:
-    st.subheader("🎛 Observer Controls")
+with c1:
+    st.subheader("🎛 Controls")
 
-    if not a7do.birthed:
-        st.info("A7DO not yet birthed.")
-        if st.button("👶 Begin Birth Event"):
-            cycle.ensure_birth()
-    else:
-        st.success("A7DO birthed")
+    pre_ticks = st.number_input("Prebirth ticks", min_value=10, max_value=300, value=30, step=10)
+    if st.button("🫧 Run Prebirth Growth Window"):
+        cycle.run_prebirth_window(n_ticks=int(pre_ticks))
 
     st.divider()
 
-    st.write("**Awake Experience Window**")
-    ticks = st.number_input(
-        "Awake ticks (continuous sensory feed)",
-        min_value=5,
-        max_value=200,
-        value=20,
-        step=5,
-    )
+    if st.button("👶 Trigger Birth Transition"):
+        cycle.trigger_birth()
 
-    if st.button("▶ Run Awake Window"):
-        cycle.run_day_window(n_ticks=int(ticks))
+    st.divider()
 
-    if st.button("🌙 Sleep → Next Day"):
-        cycle.sleep_and_advance()
+    post_place = st.selectbox("Postbirth place", ["home", "hospital"])
+    post_ticks = st.number_input("Postbirth ticks", min_value=5, max_value=200, value=20, step=5)
+    if st.button("▶ Run Postbirth Window"):
+        cycle.run_postbirth_window(place=post_place, n_ticks=int(post_ticks))
 
-# =====================================================================
-# A7DO INTERNAL STATE
-# =====================================================================
-with col_state:
-    st.subheader("🧍 A7DO Internal State")
+    if st.button("🌙 Sleep & Consolidate → Next Day"):
+        cycle.sleep_and_consolidate()
 
+with c2:
+    st.subheader("🧍 Internal State")
+    st.write(f"**Exists:** {a7do.exists}")
+    st.write(f"**Birthed:** {a7do.birthed}")
     st.write(f"**Day:** {a7do.day}")
-    st.write(f"**Awake:** {cycle.awake}")
-    st.write(f"**Perceived Place:** {a7do.perceived.current_place}")
+    st.write(f"**Current place (perceived):** {a7do.world.current_place}")
 
     st.divider()
+    st.write("**Growth**")
+    st.metric("Sensory gain", f"{a7do.body.sensory_gain:.2f}")
+    st.metric("Motor strength", f"{a7do.body.motor_strength:.2f}")
+    st.metric("Reflex rate", f"{a7do.body.reflex_rate:.2f}")
 
-    st.write("**Body Drives**")
+    st.divider()
+    st.write("**Drives**")
     st.progress(a7do.body.hunger, text=f"Hunger: {a7do.body.hunger:.2f}")
     st.progress(a7do.body.wetness, text=f"Wetness: {a7do.body.wetness:.2f}")
     st.progress(a7do.body.fatigue, text=f"Fatigue: {a7do.body.fatigue:.2f}")
+    st.progress(min(1.0, a7do.body.arousal / 2.0), text=f"Arousal: {a7do.body.arousal:.2f}")
 
     st.divider()
+    st.write("**Familiarity (Top patterns)**")
+    for pat, score in a7do.familiarity.top(6):
+        st.write(f"- {pat}: {score:.2f}")
 
-    st.write("**Familiarity (Top Patterns)**")
-    for pattern, score in a7do.familiarity.top(5):
-        st.write(f"- {pattern}: {score:.2f}")
-
-# =====================================================================
-# OBSERVER LOG
-# =====================================================================
-with col_log:
-    st.subheader("📜 Observer Log (Live)")
-
+with c3:
+    st.subheader("📜 Observer Log (latest 80)")
     if not a7do.log.entries:
-        st.info("No experiences yet.")
+        st.info("No events yet.")
     else:
-        for entry in reversed(a7do.log.entries[-50:]):
+        for entry in reversed(a7do.log.entries[-80:]):
             st.write(entry)
-
-# =====================================================================
-# WORLD SNAPSHOT (DEBUG / TRANSPARENCY)
-# =====================================================================
-with st.expander("🌍 World Snapshot (Observer View)"):
-    st.json(world.snapshot())
