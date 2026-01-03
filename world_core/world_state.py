@@ -1,88 +1,60 @@
-import random
-from dataclasses import dataclass
-from typing import List, Optional
-
-
-@dataclass
-class Bot:
-    name: str
-    role: str  # "mum", "dad", "nurse", etc.
-    x: float = 0.0
-    y: float = 0.0
-
-
 class WorldState:
     """
-    Minimal always-running world.
-    - Holds a current place label
-    - Provides ambient/light/sound levels
-    - Holds bots (mum/dad/etc.)
-    - Supports distance checks
-
-    This is intentionally simple and safe.
+    Objective world state.
+    Exists independently of A7DO awareness.
     """
 
-    def __init__(self, seed: int = 7):
-        self.rng = random.Random(seed)
-        self.t = 0.0
-        self.current_place = "hospital"
+    def __init__(self):
+        self.initialised = False
+        self.time_minutes = 0.0
 
-        # baseline environment signals
-        self._ambient = 0.25
-        self._light = 0.35
-        self._sound = 0.35
+        # Global environment (objective)
+        self.environment = {
+            "light": 0.5,     # 0–1 ambient brightness
+            "sound": 0.4,     # ambient noise
+            "motion": 0.3,    # movement in environment
+            "temperature": 0.5,
+        }
 
-        # bots
-        self.bots: List[Bot] = [
-            Bot(name="Mum", role="mum", x=0.0, y=0.0),
-            Bot(name="Dad", role="dad", x=1.2, y=0.2),
-            Bot(name="Nurse", role="nurse", x=0.8, y=0.8),
-        ]
+        # Places exist before A7DO perceives them
+        self.places = {
+            "hospital": {"active": True},
+            "home": {"active": False},
+            "park": {"active": False},
+            "street": {"active": False},
+        }
 
-        # A7DO physical anchor in world frame (very simple marker)
-        self.a7do_x = 0.0
-        self.a7do_y = 0.0
+        # Living entities in the world
+        self.bots = {}
 
-    def tick(self, dt: float = 0.25):
+    def initialise(self):
         """
-        Advance world time and gently vary environment.
+        Bootstraps the world before A7DO awareness.
         """
-        self.t += float(dt)
+        self.initialised = True
 
-        # gentle drift (world is never perfectly static)
-        self._ambient = self._clamp(self._ambient + self.rng.uniform(-0.01, 0.01))
-        self._light = self._clamp(self._light + self.rng.uniform(-0.02, 0.02))
-        self._sound = self._clamp(self._sound + self.rng.uniform(-0.02, 0.02))
+    def tick(self, minutes: float):
+        """
+        Advances world time and environment.
+        """
+        self.time_minutes += minutes
 
-        # small bot motion
-        for b in self.bots:
-            b.x += self.rng.uniform(-0.05, 0.05)
-            b.y += self.rng.uniform(-0.05, 0.05)
+        # Simple diurnal-like cycle without naming it
+        phase = (self.time_minutes % 1440) / 1440.0
 
-    def set_place(self, place: str):
-        self.current_place = place
+        self.environment["light"] = 0.3 + 0.7 * abs(0.5 - phase) * 2
+        self.environment["sound"] = 0.3 + 0.2 * (phase > 0.4 and phase < 0.6)
+        self.environment["motion"] = 0.2 + 0.3 * (phase > 0.3 and phase < 0.7)
 
-    def get_bot(self, role: str) -> Optional[Bot]:
-        role = role.lower().strip()
-        for b in self.bots:
-            if b.role.lower() == role:
-                return b
-        return None
-
-    def distance_between_a7do_and(self, bot: Bot) -> float:
-        dx = (self.a7do_x - bot.x)
-        dy = (self.a7do_y - bot.y)
-        return (dx * dx + dy * dy) ** 0.5
-
-    def ambient_level(self) -> float:
-        return float(self._ambient)
-
-    def light_level(self) -> float:
-        return float(self._light)
-
-    def sound_level(self) -> float:
-        return float(self._sound)
-
-    @staticmethod
-    def _clamp(x: float) -> float:
-        return max(0.0, min(1.0, float(x)))
+    def snapshot(self):
+        """
+        Observer-visible world snapshot.
+        """
+        return {
+            "time_minutes": round(self.time_minutes, 2),
+            "environment": {k: round(v, 3) for k, v in self.environment.items()},
+            "active_places": [
+                p for p, v in self.places.items() if v.get("active")
+            ],
+            "bots": list(self.bots.keys()),
+        }
