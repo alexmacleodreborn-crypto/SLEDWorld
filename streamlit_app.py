@@ -9,6 +9,8 @@ from world_core.world_clock import WorldClock
 # Streamlit setup
 # -------------------------------------------------
 
+st.autorefresh(interval=1000, key="world_tick")
+
 st.set_page_config(
     page_title="SLED World – A7DO Cognitive Emergence",
     layout="wide",
