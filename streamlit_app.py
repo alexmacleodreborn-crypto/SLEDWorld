@@ -30,43 +30,45 @@ gestation = st.session_state.gestation
 cycle = st.session_state.cycle
 
 # -------------------------
-# WORLD TICK (REAL TIME)
+# WORLD TICK (always)
 # -------------------------
 
 clock.tick()
 gestation.tick(clock)
 
+# -------------------------
+# Pre-birth experience
+# -------------------------
+
+if not a7do.birthed:
+    # womb ambience runs continuously
+    a7do.familiarity.observe(
+        place="womb",
+        channels={"heartbeat": 0.6, "muffled_sound": 0.3, "pressure": 0.2},
+        intensity=0.2,
+    )
+
+# -------------------------
+# Auto birth transition
+# -------------------------
+
 if not a7do.birthed and gestation.ready_for_birth():
     cycle.ensure_birth()
     gestation.mark_completed()
-    a7do.internal_log.append("auto-birth: gestation threshold reached")
-
-# -------------------------
-# Controls (post-birth)
-# -------------------------
-
-st.sidebar.header("Observer")
-
-if a7do.birthed:
-    if st.sidebar.button("Wake"):
-        cycle.wake()
-
-    if st.sidebar.button("Sleep"):
-        cycle.sleep()
-        cycle.day += 1
+    a7do.internal_log.append("transition: womb → birth")
 
 # -------------------------
 # Display
 # -------------------------
 
-st.title("A7DO Cognitive Emergence")
+st.title("SLED World – A7DO Cognitive Emergence")
 
 st.subheader("World Time")
 st.json(clock.snapshot())
 
 st.subheader("Gestation")
 st.write("Elapsed days:", round(gestation.elapsed_days, 2))
-st.write("Ready:", gestation.ready_for_birth())
+st.write("Completed:", gestation.completed)
 
 st.subheader("A7DO State")
 st.write("Birthed:", a7do.birthed)
@@ -76,11 +78,7 @@ st.write("Perceived place:", a7do.perceived_place)
 st.subheader("Internal Log")
 st.code("\n".join(a7do.internal_log[-20:]) if a7do.internal_log else "—")
 
-st.subheader("Familiarity")
+st.subheader("Familiarity (top patterns)")
 st.json(a7do.familiarity.top())
 
-# -------------------------
-# AUTO REFRESH (ESSENTIAL)
-# -------------------------
-
-st.caption("⏱ World runs on real time. Refresh page or interact to advance.")
+st.caption("World time advances on each refresh or interaction.")
