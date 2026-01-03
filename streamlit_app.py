@@ -7,6 +7,19 @@ from a7do_core.gestation_bridge import GestationBridge
 from world_core.world_clock import WorldClock
 
 # -------------------------------------------------
+# Safe rerun (works across Streamlit versions)
+# -------------------------------------------------
+
+def safe_rerun():
+    if hasattr(st, "rerun"):
+        st.rerun()
+    elif hasattr(st, "experimental_rerun"):
+        st.experimental_rerun()
+    else:
+        # Last-resort fallback: trigger state change
+        st.session_state["_rerun"] = time.time()
+
+# -------------------------------------------------
 # Streamlit setup
 # -------------------------------------------------
 
@@ -45,13 +58,12 @@ gestation = st.session_state.gestation
 # -------------------------------------------------
 
 # Advance world time
-# 0.25 hours = 15 minutes per tick
-clock.tick(0.25)
+clock.tick(0.25)  # 15 minutes per UI cycle
 
 # Pre-birth gestation & auto-birth
 gestation.tick()
 
-# Body passive decay
+# Passive body decay
 a7do.body.tick()
 
 # -------------------------------------------------
@@ -59,7 +71,6 @@ a7do.body.tick()
 # -------------------------------------------------
 
 st.sidebar.header("Observer Control")
-st.sidebar.write("World time always runs")
 
 if a7do.birthed:
     if not a7do.is_awake:
@@ -97,8 +108,8 @@ st.subheader("Body State")
 st.json(a7do.body.snapshot())
 
 # -------------------------------------------------
-# 🔁 HARD GUARANTEED TICK
+# 🔁 GUARANTEED WORLD LOOP
 # -------------------------------------------------
 
 time.sleep(1)
-st.experimental_rerun()
+safe_rerun()
