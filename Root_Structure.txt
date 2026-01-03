@@ -1,20 +1,28 @@
-SLED_World/
+sledworld/
 ├── streamlit_app.py
 │
-├── a7do_core/
+├── world_core/
 │   ├── __init__.py
-│   ├── a7do_state.py
-│   ├── perceived_world.py
-│   ├── body_state.py
-│   ├── familiarity.py
-│   ├── gating.py
-│   ├── internal_log.py
-│   ├── event_applier.py
-│   ├── sleep.py
-│   └── day_cycle.py
+│   ├── world_state.py
+│   ├── world_clock.py
+│   ├── world_bootstrap.py
+│   ├── bot.py
+│   ├── schedules.py
+│   ├── intersection_gate.py
 │
-└── world_frame/
+├── experience_layer/
+│   ├── __init__.py
+│   ├── experience_event.py
+│   ├── event_generator.py
+│   ├── transitions.py
+│   └── observer_controls.py
+│
+└── a7do_core/
     ├── __init__.py
-    ├── world_controller.py
-    ├── event_generator.py
-    └── transitions.py
+    ├── a7do_state.py
+    ├── body_state.py
+    ├── familiarity.py
+    ├── memory.py
+    ├── day_cycle.py
+    ├── event_applier.py
+    └── sleep_replay.py
