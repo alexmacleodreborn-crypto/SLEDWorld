@@ -7,75 +7,74 @@ from world_core.world_clock import WorldClock
 
 st.set_page_config(page_title="SLED World – A7DO", layout="wide")
 
-# -------------------------------------------------
+# -------------------------
 # Session initialisation
-# -------------------------------------------------
+# -------------------------
+
+if "a7do" not in st.session_state:
+    st.session_state.a7do = A7DOState()
 
 if "clock" not in st.session_state:
     st.session_state.clock = WorldClock()
     st.session_state.clock.start()
 
-if "a7do" not in st.session_state:
-    st.session_state.a7do = A7DOState()
+if "gestation" not in st.session_state:
+    st.session_state.gestation = GestationBridge()
 
 if "cycle" not in st.session_state:
     st.session_state.cycle = DayCycle(st.session_state.a7do)
 
-if "gestation" not in st.session_state:
-    st.session_state.gestation = GestationBridge(
-        a7do=st.session_state.a7do,
-        clock=st.session_state.clock,
-    )
-
-clock = st.session_state.clock
 a7do = st.session_state.a7do
-cycle = st.session_state.cycle
+clock = st.session_state.clock
 gestation = st.session_state.gestation
+cycle = st.session_state.cycle
 
-# -------------------------------------------------
-# WORLD TICK (ALWAYS RUNNING)
-# -------------------------------------------------
+# -------------------------
+# World tick (always runs)
+# -------------------------
 
-clock.tick(minutes=15)
+clock.tick(0.25)  # 15 minutes per refresh
 
-# Pre-birth automatic experience
+# Pre-birth sensory exposure
 if not a7do.birthed:
-    gestation.tick()
+    gestation.tick(clock)
 
-# -------------------------------------------------
-# Observer Controls (POST-BIRTH ONLY)
-# -------------------------------------------------
+# -------------------------
+# Controls
+# -------------------------
 
 st.sidebar.header("Observer Control")
 
-if a7do.birthed:
-    if not a7do.is_awake:
-        if st.sidebar.button("Wake"):
-            cycle.wake()
-    else:
-        if st.sidebar.button("Sleep"):
-            cycle.sleep()
-            cycle.next_day()
+if not a7do.birthed:
+    if st.sidebar.button("Trigger Birth"):
+        cycle.ensure_birth()
+else:
+    if st.sidebar.button("Wake"):
+        cycle.wake()
 
-# -------------------------------------------------
-# DISPLAY
-# -------------------------------------------------
+    if st.sidebar.button("Sleep"):
+        cycle.sleep()
+        cycle.next_day()
 
-st.title("SLED World – A7DO Cognitive Emergence")
+# -------------------------
+# Display
+# -------------------------
+
+st.title("A7DO Cognitive Emergence")
 
 st.subheader("World Time")
 st.json(clock.snapshot())
 
+st.subheader("Gestation")
+st.write("Elapsed days:", round(gestation.elapsed_days, 2))
+st.write("Ready for birth:", gestation.ready_for_birth())
+
 st.subheader("A7DO State")
-st.write("Birthed:", a7do.birthed)
 st.write("Awake:", a7do.is_awake)
-st.write("Perceived Place:", a7do.perceived_place)
+st.write("Birthed:", a7do.birthed)
 
 st.subheader("Internal Log")
-st.code("\n".join(a7do.internal_log[-25:]) if a7do.internal_log else "—")
+st.code("\n".join(a7do.internal_log) if a7do.internal_log else "—")
 
-st.subheader("Familiarity Patterns (Pre-symbolic)")
+st.subheader("Familiarity Patterns")
 st.json(a7do.familiarity.top())
-
-st.subheader("Body Snapshot")
-st.json(a7do.body.snapshot())
