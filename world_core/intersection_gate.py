@@ -1,36 +1,52 @@
-# world_core/intersection_gate.py
-
 def perceived_snapshot(world, a7do):
     """
-    Intersection gate between objective world state and A7DO perception.
-
-    Rules:
-    - World always exists fully.
-    - A7DO only receives a reduced, gated snapshot.
-    - Pre-birth: heavily muted, no discrete objects.
-    - Post-birth: gradual unlocking.
+    Returns the filtered world snapshot as perceived by A7DO.
+    Separates internal vs external rhythms correctly.
     """
 
-    # Base environmental signals from world
-    env = world.environment_snapshot()
-
-    # Gating factor
-    if not a7do.birthed:
-        gate = 0.3
-    else:
-        gate = 1.0
-
     snapshot = {
-        "place": env.get("place", "unknown"),
-        "light": env.get("light", 0.0) * gate,
-        "sound": env.get("sound", 0.0) * gate,
-        "motion": env.get("motion", 0.0) * gate,
-        "touch": env.get("touch", 0.0) * gate,
-        "temperature": env.get("temperature", 0.0) * gate,
-        "smell": env.get("smell", 0.0) * gate,
+        "place": world.current_place,
+        "channels": {},
     }
 
-    # No objects, no language, no symbols here
-    # Those come later via familiarity + consolidation
+    # -------------------------------------------------
+    # INTERNAL – A7DO heartbeat (always present)
+    # -------------------------------------------------
+    snapshot["channels"]["internal_rhythm"] = 0.35
+
+    # -------------------------------------------------
+    # EXTERNAL – maternal heartbeat
+    # -------------------------------------------------
+    mum = world.get_bot(role="mum")
+
+    if mum:
+        distance = world.distance_between(a7do, mum)
+
+        # Prebirth: always present
+        if not a7do.birthed:
+            snapshot["channels"]["maternal_rhythm"] = 0.6
+
+        # Early postbirth: fades with distance
+        elif distance < 1.5:
+            snapshot["channels"]["maternal_rhythm"] = max(
+                0.0, 0.5 - (distance * 0.2)
+            )
+
+    # -------------------------------------------------
+    # OTHER BOTS – heartbeats (postbirth only)
+    # -------------------------------------------------
+    if a7do.birthed:
+        for bot in world.bots:
+            if bot.role in ("dad", "nurse", "doctor"):
+                d = world.distance_between(a7do, bot)
+                if d < 1.0:
+                    snapshot["channels"]["external_rhythm"] = 0.15
+
+    # -------------------------------------------------
+    # Ambient world channels
+    # -------------------------------------------------
+    snapshot["channels"]["ambient"] = world.ambient_level()
+    snapshot["channels"]["light"] = world.light_level()
+    snapshot["channels"]["sound"] = world.sound_level()
 
     return snapshot
