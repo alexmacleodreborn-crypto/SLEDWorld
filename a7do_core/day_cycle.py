@@ -19,7 +19,7 @@ class DayCycle:
         if self.a7do.birthed:
             return
 
-        self.a7do.mark_birthed()
+        self.a7do.mark_birth()
         self.current_place = self.world.birth_place
         self.awake = True
         self.a7do.perceived.update_place(self.current_place)
