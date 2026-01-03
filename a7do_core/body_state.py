@@ -1,23 +1,36 @@
 # sledworld/a7do_core/body_state.py
 
-from world_core.heartbeat_field import HeartbeatField
+from sledworld.world_core.heartbeat_field import HeartbeatField
+
 
 class BodyState:
     """
     Internal physiological state of A7DO.
-    Runs continuously regardless of awareness.
+    Runs continuously pre-birth and post-birth.
+    This is NOT cognition — this is raw body signal.
     """
 
     def __init__(self):
-        # Fetal / newborn heart rate
-        self.heartbeat = HeartbeatField(bpm=130, noise=0.12, seed=3)
+        # Fetal / newborn heart rate (higher than adult)
+        self.heartbeat = HeartbeatField(
+            bpm=130,      # typical fetal/newborn BPM
+            noise=0.12,
+            seed=3
+        )
+
         self.last_intensity = 0.0
 
     def tick(self, dt_seconds: float):
+        """
+        Advance internal body physiology.
+        """
         self.last_intensity = self.heartbeat.tick(dt_seconds)
 
-    def snapshot(self):
+    def snapshot(self) -> dict:
+        """
+        Observer-visible body snapshot.
+        """
         return {
-            "heartbeat_intensity": round(self.last_intensity, 3),
             "heartbeat_bpm": self.heartbeat.bpm,
+            "heartbeat_intensity": round(self.last_intensity, 3),
         }
