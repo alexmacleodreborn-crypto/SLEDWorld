@@ -1,16 +1,31 @@
-from dataclasses import dataclass
-
-@dataclass
 class GestationBridge:
-    gestation_days_required: float = 180.0
-    elapsed_days: float = 0.0
-    completed: bool = False
+    """
+    Couples mother physiology into A7DO physiology.
+    This is pre-birth ONLY.
+    """
 
-    def tick(self, clock):
-        self.elapsed_days = clock.days_elapsed
+    def __init__(self, mother, a7do):
+        self.mother = mother
+        self.a7do = a7do
+        self.completed = False
 
-    def ready_for_birth(self) -> bool:
-        return (not self.completed) and self.elapsed_days >= self.gestation_days_required
+    def tick(self, dt: float):
+        if self.completed:
+            return
 
-    def mark_completed(self):
+        # 1. Heartbeat entrainment (bias, not sync)
+        delta = (
+            self.mother.heartbeat_phase
+            - self.a7do.phys.heartbeat_phase
+        )
+        self.a7do.phys.heartbeat_phase += delta * 0.02
+
+        # 2. Pressure modulation
+        stress_factor = 1.0 + self.mother.stress
+        self.a7do.phys.pressure += dt * 0.01 * stress_factor
+
+        # 3. Activity adds background arousal
+        self.a7do.phys.arousal += dt * self.mother.activity * 0.01
+
+    def end_gestation(self):
         self.completed = True
