@@ -1,66 +1,46 @@
-# a7do_core/gestation_bridge.py
+from dataclasses import dataclass
 
+from world_core.mother_bot import MotherBot
+from a7do_core.event_applier import apply_event
+
+
+@dataclass
 class GestationBridge:
     """
-    Bridges always-on world time into pre-birth A7DO experience.
-    Handles automatic transition to birth.
+    Bridges world-time maternal signals into A7DO pre-birth experience.
+    A7DO does NOT control this.
     """
+    a7do: object
+    clock: object
 
-    GESTATION_DAYS = 180.0  # ~6 months compressed
-
-    def __init__(self, a7do, world_clock):
-        self.a7do = a7do
-        self.clock = world_clock
-        self.last_sample_minute = 0.0
+    mother: MotherBot = MotherBot()
+    gestation_days: int = 270
+    elapsed_days: float = 0.0
+    completed: bool = False
 
     def tick(self):
         """
         Called every world tick.
+        Feeds muted sensory patterns to A7DO until birth threshold.
         """
-
-        # Update elapsed gestation time
-        elapsed = self.clock.days_elapsed
-
-        # Pre-birth sensory exposure
-        if not self.a7do.birthed:
-            self._prebirth_experience(elapsed)
-
-            if elapsed >= self.GESTATION_DAYS:
-                self._trigger_birth()
-
-    def _prebirth_experience(self, elapsed_days: float):
-        """
-        Very low-level, gated sensory imprinting.
-        """
-
-        # Sample roughly every 30 world minutes
-        if self.clock.minutes - self.last_sample_minute < 30:
+        if self.completed:
             return
 
-        self.last_sample_minute = self.clock.minutes
+        # Advance mother independently
+        self.mother.tick(minutes=15)
 
-        # Pre-birth muted sensory exposure
-        self.a7do.familiarity.observe(
-            place="womb",
-            channels={
-                "heartbeat": 0.6,
-                "pressure": 0.4,
-                "muffled_sound": 0.3,
-            },
-            intensity=0.5,
-        )
+        # Advance gestation time
+        self.elapsed_days = self.clock.days_elapsed
 
-        self.a7do.internal_log.append(
-            "prebirth: rhythmic sensory exposure"
-        )
+        # Pre-birth sensory exposure
+        snapshot = self.mother.prebirth_sensory_snapshot()
+        apply_event(self.a7do, snapshot)
 
-    def _trigger_birth(self):
-        """
-        Automatic birth transition.
-        """
-        self.a7do.mark_birthed()
-        self.a7do.familiarity.unlock()
-
-        self.a7do.internal_log.append(
-            "birth: awareness gate opened"
-        )
+        # Birth trigger (automatic, not button-driven)
+        if self.elapsed_days >= self.gestation_days:
+            self.completed = True
+            self.a7do.mark_birthed()
+            self.a7do.unlock_awareness()
+            self.a7do.internal_log.append(
+                "birth: transition from womb to external world"
+            )
