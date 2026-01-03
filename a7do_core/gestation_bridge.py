@@ -1,63 +1,29 @@
-from dataclasses import dataclass, field
-
-
-@dataclass
+# a7do_core/gestation_bridge.py
 class GestationBridge:
-    """
-    Couples world mother physiology into A7DO pre-birth sensory input.
-    Runs continuously while world time advances.
-    """
-
-    a7do: object
-    mother: object
-    clock: object
-
-    completed: bool = False
-    elapsed_days: float = 0.0
+    def __init__(self, a7do, clock, duration_days=180):
+        self.a7do = a7do
+        self.clock = clock
+        self.duration_days = duration_days
+        self.completed = False
 
     def tick(self):
-        """
-        Advance gestation coupling.
-        Called every world tick.
-        """
-
         if self.completed:
             return
 
-        # Advance elapsed gestation time
-        self.elapsed_days = self.clock.days_elapsed
+        progress = self.clock.days_elapsed / self.duration_days
 
-        # Pull mother physiology snapshot
-        mother_snapshot = self.mother.snapshot()
-
-        # --- DEFENSIVE READ ---
-        heartbeat = mother_snapshot.get("heartbeat")
-
-        if heartbeat is None:
-            # Mother exists but heartbeat not yet initialised
-            return
-
-        # --- PRE-BIRTH SENSORY COUPLING ---
-        # Muffled, rhythmic, non-symbolic
-        sensory_channels = {
-            "pressure": 0.6,
-            "sound": 0.4,
-            "rhythm": heartbeat.get("amplitude", 1.0),
-        }
-
-        # Intensity scales with heartbeat amplitude
-        intensity = heartbeat.get("amplitude", 1.0) * 0.5
-
+        # Pre-birth sensory exposure
         self.a7do.familiarity.observe(
             place="womb",
-            channels=sensory_channels,
-            intensity=intensity,
+            channels={
+                "heartbeat": 0.6,
+                "pressure": 0.4,
+                "sound": 0.2,
+            },
+            intensity=progress
         )
 
-        # --- AUTO BIRTH CONDITION ---
-        # Example: 270 days ≈ 9 months
-        if self.elapsed_days >= 270:
+        if progress >= 1.0:
             self.completed = True
-            self.a7do.internal_log.append(
-                "gestation complete → birth transition ready"
-            )
+            self.a7do.unlock_awareness()
+            self.a7do.mark_birthed()
