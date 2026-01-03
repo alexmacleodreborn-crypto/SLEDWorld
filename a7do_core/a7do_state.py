@@ -1,3 +1,8 @@
+from .body_state import BodyState
+from .familiarity import FamiliarityTracker
+from .memory import MemoryStore
+
+
 class A7DOState:
     def __init__(self):
         self.birthed = False
@@ -7,7 +12,7 @@ class A7DOState:
         self.familiarity = FamiliarityTracker()
         self.memory = MemoryStore()
 
-        # ✅ ADD THIS
+        # Observer-visible phenomenology
         self.internal_log: list[str] = []
 
     def mark_birth(self):
