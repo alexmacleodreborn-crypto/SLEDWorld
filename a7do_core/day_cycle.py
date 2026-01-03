@@ -2,9 +2,11 @@
 
 from .event_applier import apply_event
 
+GESTATION_LIMIT = 180  # abstracted ~6 months
+
 class DayCycle:
     """
-    Manages wake/sleep and the birth transition.
+    Controls wake/sleep cycles and birth allowance.
     """
 
     def __init__(self, a7do):
@@ -12,20 +14,47 @@ class DayCycle:
         self.day = 0
         self.has_birthed = False
 
+    # ---------- Pre-birth cycles ----------
+
+    def prebirth_cycle(self):
+        if self.has_birthed:
+            return
+
+        self.a7do.prebirth_wake()
+
+        # Ambient womb sensory background
+        womb_event = {
+            "place": "womb",
+            "channels": {
+                "heartbeat": 0.8,
+                "pressure": 0.6,
+                "sound": 0.4
+            },
+            "intensity": 0.3
+        }
+        apply_event(self.a7do, womb_event)
+
+        self.a7do.prebirth_sleep()
+
+        # Automatic birth allowance
+        if self.a7do.gestation_cycles >= GESTATION_LIMIT:
+            self.ensure_birth()
+
+    # ---------- Birth ----------
+
     def ensure_birth(self):
         if self.has_birthed:
             return
 
         self.has_birthed = True
 
-        # Pre-birth sensory surge
         birth_event = {
             "place": "womb",
             "channels": {
                 "pressure": 1.0,
-                "sound": 0.9,
+                "sound": 1.0,
                 "motion": 1.0,
-                "light": 0.2
+                "light": 0.3
             },
             "intensity": 1.0
         }
@@ -33,8 +62,11 @@ class DayCycle:
         apply_event(self.a7do, birth_event)
         self.a7do.unlock_birth()
 
+    # ---------- Post-birth ----------
+
     def wake(self):
-        self.a7do.wake()
+        self.a7do.is_awake = True
+        self.a7do.internal_log.append("wake")
 
     def sleep(self):
         self.a7do.sleep()
