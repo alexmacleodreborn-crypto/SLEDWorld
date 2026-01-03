@@ -1,117 +1,117 @@
 from .event_applier import apply_event
-from .sleep import sleep_consolidate
 
 class DayCycle:
     """
-    Observer controls *starting* wake and running a window.
-    Sleep is body-induced when fatigue threshold is reached.
+    Runs continuous prebirth and postbirth windows.
+    Prebirth: "womb" place, muted sensory, drift sleep/awake, growth ramps.
+    Birth: explicit transition event.
+    Postbirth: home/hospital, clearer wake/sleep.
     """
 
-    def __init__(self, a7do, world):
+    def __init__(self, a7do, world=None):
         self.a7do = a7do
         self.world = world
-
-        self.current_place = None
         self.awake = False
-        self.tick_index = 0
 
-    def ensure_birth(self):
-        if self.a7do.birthed:
-            return
-
-        self.a7do.mark_birth()
-        self.current_place = self.world.birth_place
-        self.awake = True
-        self.a7do.perceived.update_place(self.current_place)
-
-        for ev in self.world.birth_events():
-            apply_event(self.a7do, ev)
-
-        # After birth anchor, we allow a gentle move to home later via observer action
-        self.a7do.log.add("birth-anchor complete")
-
-    def wake(self):
-        if not self.a7do.birthed:
-            self.a7do.log.add("wake blocked: not birthed")
-            return
-        self.awake = True
-        if self.current_place is None:
-            self.current_place = self.world.home_place
-        self.a7do.perceived.update_place(self.current_place)
-        self.a7do.log.add("wake anchor")
-
-    def _body_snapshot(self):
-        return {
-            "hunger": self.a7do.body.hunger,
-            "wetness": self.a7do.body.wetness,
-            "fatigue": self.a7do.body.fatigue,
-        }
-
-    def run_day_window(self, n_ticks: int = 20):
+    def run_prebirth_window(self, n_ticks: int = 30):
         """
-        This is your '30 seconds' equivalent block.
-        Each tick emits low-information sensory events.
-        Care actions happen based on body state.
+        Prebirth continuous sensory baseline + growth + reflex.
+        """
+        self.a7do.log.add("prebirth: window start")
+        for _ in range(n_ticks):
+            # growth always runs
+            self.a7do.body.grow_tick(dt=1.0)
+
+            # fetal drift awake/sleep
+            if not self.awake:
+                # sleeping
+                self.a7do.body.sleep_tick(dt=1.0)
+                if self.a7do.body.fatigue < 0.35:
+                    self.awake = True
+                    self.a7do.log.add("prebirth: drift awake")
+            else:
+                # awake-ish
+                self.a7do.body.tick_awake(dt=1.0)
+
+                # constant womb noise/pressure baseline
+                apply_event(self.a7do, {
+                    "type": "experience",
+                    "place": "womb",
+                    "intensity": 0.35,
+                    "channels": {
+                        "noise": 0.45,
+                        "pressure": 0.35,
+                        "warmth": 0.25
+                    }
+                })
+
+                if self.a7do.body.should_sleep():
+                    self.awake = False
+                    self.a7do.log.add("prebirth: drift sleep")
+
+        self.a7do.log.add("prebirth: window end")
+
+    def trigger_birth(self):
+        """
+        World birth event triggers internal transition.
+        """
+        apply_event(self.a7do, {
+            "type": "birth",
+            "place": "hospital",
+            "intensity": 1.0,
+            "channels": {
+                "pressure": 1.0,
+                "noise": 1.0,
+                "light": 1.0,
+                "touch": 1.0,
+            }
+        })
+
+    def run_postbirth_window(self, place: str = "home", n_ticks: int = 20):
+        """
+        Postbirth continuous feed while awake, auto sleep when fatigue threshold.
         """
         if not self.a7do.birthed:
-            self.a7do.log.add("run blocked: not birthed")
+            self.a7do.log.add("postbirth blocked: not birthed")
             return
 
-        if not self.awake:
-            self.a7do.log.add("run blocked: currently asleep")
-            return
-
-        if self.current_place is None:
-            self.current_place = self.world.home_place
+        self.a7do.log.add(f"postbirth: window start place={place}")
+        self.awake = True
 
         for _ in range(n_ticks):
-            self.tick_index += 1
-
-            # Body evolves while awake
+            self.a7do.body.grow_tick(dt=1.0)
             self.a7do.body.tick_awake(dt=1.0)
 
-            # Caregiver routine triggers (still pre-language)
-            if self.a7do.body.hunger > 0.85:
-                self.a7do.body.feed(self.tick_index)
-                apply_event(self.a7do, {
-                    "place": self.current_place,
-                    "intensity": 1.2,
-                    "pattern": "care-feeding-warmth"
-                })
-                self.a7do.log.add("care: feeding applied")
+            # ambient baseline
+            apply_event(self.a7do, {
+                "type": "experience",
+                "place": place,
+                "intensity": 0.55,
+                "channels": {
+                    "noise": 0.35,
+                    "light": 0.40,
+                    "touch": 0.25
+                }
+            })
 
-            if self.a7do.body.wetness > 0.85:
-                self.a7do.body.change(self.tick_index)
-                apply_event(self.a7do, {
-                    "place": self.current_place,
-                    "intensity": 1.2,
-                    "pattern": "care-changing-clean"
-                })
-                self.a7do.log.add("care: changing applied")
-
-            # Continuous sensory stream from world
-            events = self.world.newborn_tick_events(
-                place=self.current_place,
-                tick_index=self.tick_index,
-                body_snapshot=self._body_snapshot()
-            )
-            for ev in events:
-                apply_event(self.a7do, ev)
-
-            # Body-induced sleep
-            if self.a7do.body.can_sleep():
+            if self.a7do.body.should_sleep():
                 self.awake = False
                 self.a7do.log.add("sleep onset (body-induced)")
                 break
 
-    def sleep_and_advance(self):
+        self.a7do.log.add("postbirth: window end")
+
+    def sleep_and_consolidate(self):
         """
-        Observer can force the sleep phase to run + advance day.
+        Sleep replay reinforces familiar patterns.
         """
-        sleep_consolidate(self.a7do)
-        self.awake = False
+        replayed = self.a7do.familiarity.replay(n=5)
+        self.a7do.log.add("sleep: replay and consolidation")
+        for pat in replayed:
+            self.a7do.log.add(f"sleep-replay: {pat}")
+
+        # run a few sleep ticks to settle body
+        for _ in range(8):
+            self.a7do.body.sleep_tick(dt=1.0)
+
         self.a7do.next_day()
-        self.world.day += 1
-        # New day starts at home by default after birth era
-        self.current_place = self.world.home_place
-        self.a7do.perceived.update_place(self.current_place)
