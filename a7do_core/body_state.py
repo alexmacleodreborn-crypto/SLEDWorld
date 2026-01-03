@@ -1,28 +1,42 @@
-# a7do_core/body_state.py
-
 from experience_layer.heartbeat_field import HeartbeatField
 
 
 class BodyState:
     """
-    Internal physiological state of A7DO.
-    Runs continuously pre-birth and post-birth.
+    Continuous physiological substrate.
+    Exists pre-birth and post-birth.
     """
 
     def __init__(self):
-        # Fetal / newborn heart rate
+        # A7DO's own internal heartbeat
         self.heartbeat = HeartbeatField(
-            bpm=130,
-            noise=0.12,
-            seed=3
+            bpm=120,          # infant baseline
+            amplitude=0.6,
+            source="a7do"
         )
-        self.last_intensity = 0.0
+
+        self.intensity = 0.0
+
+        # Proprioceptive presence (not yet semantic)
+        self.parts = {
+            "head": 0.0,
+            "chest": 0.0,
+            "left_arm": 0.0,
+            "right_arm": 0.0,
+            "left_leg": 0.0,
+            "right_leg": 0.0,
+        }
 
     def tick(self, dt_seconds: float):
-        self.last_intensity = self.heartbeat.tick(dt_seconds)
+        self.heartbeat.tick(dt_seconds)
+        self.intensity = self.heartbeat.current_value
 
-    def snapshot(self) -> dict:
+    def apply_intensity(self, value: float):
+        self.intensity += float(value)
+
+    def snapshot(self):
         return {
-            "heartbeat_bpm": self.heartbeat.bpm,
-            "heartbeat_intensity": round(self.last_intensity, 3),
+            "heartbeat": self.heartbeat.snapshot(),
+            "intensity": round(self.intensity, 3),
+            "parts": self.parts,
         }
