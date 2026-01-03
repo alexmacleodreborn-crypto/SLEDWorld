@@ -1,22 +1,22 @@
-# sledworld/world_core/mother_bot.py
+# world_core/mother_bot.py
 
-from world_core.heartbeat_field import HeartbeatField
+from experience_layer.heartbeat_field import HeartbeatField
+
 
 class MotherBot:
     """
     Mother biological presence.
-    Provides external sensory coupling during gestation.
+    External heartbeat + sensory field.
     """
 
     def __init__(self):
-        # Adult resting heart rate
-        self.heartbeat = HeartbeatField(bpm=80, noise=0.08, seed=11)
+        self.heartbeat = HeartbeatField(
+            bpm=80,
+            noise=0.08,
+            seed=11
+        )
 
     def tick(self, dt_seconds: float) -> dict:
-        """
-        Advance mother state.
-        Returns sensory snapshot available to fetus.
-        """
         hb = self.heartbeat.tick(dt_seconds)
 
         return {
