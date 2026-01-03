@@ -1,25 +1,36 @@
-import random
-import math
+# world_core/intersection_gate.py
 
-# Independent phase for maternal heartbeat
-_maternal_phase = random.uniform(0, 2 * math.pi)
-_maternal_rate = random.uniform(1.0, 1.4)  # adult resting bpm range
+def perceived_snapshot(world, a7do):
+    """
+    Intersection gate between objective world state and A7DO perception.
 
+    Rules:
+    - World always exists fully.
+    - A7DO only receives a reduced, gated snapshot.
+    - Pre-birth: heavily muted, no discrete objects.
+    - Post-birth: gradual unlocking.
+    """
 
-def sample_world(world, focus_place: str):
-    global _maternal_phase
+    # Base environmental signals from world
+    env = world.environment_snapshot()
 
-    place = world.places[focus_place]
+    # Gating factor
+    if not a7do.birthed:
+        gate = 0.3
+    else:
+        gate = 1.0
 
-    # External heartbeat (mother)
-    _maternal_phase += _maternal_rate * 0.08
-    maternal_pulse = abs(math.sin(_maternal_phase)) * 0.2
-
-    return {
-        "place": place.name,
-        "channels": {
-            "ambient": 0.3,
-            "light": place.light_level * 0.5,
-            "maternal_heartbeat": maternal_pulse,
-        },
+    snapshot = {
+        "place": env.get("place", "unknown"),
+        "light": env.get("light", 0.0) * gate,
+        "sound": env.get("sound", 0.0) * gate,
+        "motion": env.get("motion", 0.0) * gate,
+        "touch": env.get("touch", 0.0) * gate,
+        "temperature": env.get("temperature", 0.0) * gate,
+        "smell": env.get("smell", 0.0) * gate,
     }
+
+    # No objects, no language, no symbols here
+    # Those come later via familiarity + consolidation
+
+    return snapshot
