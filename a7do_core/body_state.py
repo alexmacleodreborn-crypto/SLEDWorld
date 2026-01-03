@@ -1,19 +1,27 @@
-from experience_layer.heartbeat_field import HeartbeatField
+from world_core.heartbeat_field import HeartbeatField
 
 class BodyState:
     """
-    Pre-conscious body substrate.
+    Pre-symbolic physiological body.
     """
 
     def __init__(self):
-        self.heartbeat = HeartbeatField(bpm=140)
-        self.arousal = 0.0
+        # Internal heartbeat (faster, noisier)
+        self.internal_heartbeat = HeartbeatField(
+            bpm_mean=110.0,
+            bpm_variance=20.0,
+            seed=99
+        )
+        self.last_level = 0.0
 
-    def apply_intensity(self, intensity: float):
-        self.arousal = max(self.arousal, intensity)
+    def entrain(self, external_heartbeat: float, minutes: float):
+        """
+        Entrain internal rhythm to external signal.
+        """
+        internal = self.internal_heartbeat.tick(minutes)
+        self.last_level = (internal * 0.7) + (external_heartbeat * 0.3)
 
-    def snapshot(self, world_minutes: float):
+    def snapshot(self):
         return {
-            "heartbeat": self.heartbeat.sample(world_minutes),
-            "arousal": round(self.arousal, 3)
+            "heartbeat_level": round(self.last_level, 3)
         }
