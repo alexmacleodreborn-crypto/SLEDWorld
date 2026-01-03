@@ -1,38 +1,35 @@
-# a7do_core/event_applier.py
-
-def apply_event(a7do, event):
-    """
-    Apply a world or experience event to A7DO.
-    This is the ONLY place where the external world
-    is allowed to touch the internal organism.
-    """
-
+def apply_event(a7do, event: dict):
     etype = event.get("type", "experience")
+    place = event.get("place", a7do.world.current_place)
     intensity = float(event.get("intensity", 0.5))
-    place = event.get("place", "unknown")
-    pattern = event.get("pattern", "ambient")
+    channels = event.get("channels", {}) or {}
 
-    # --- Update perceived world ---
-    a7do.perceived.current_place = place
+    # Birth transition (world event triggers internal unlock)
+    if etype == "birth":
+        a7do.mark_birth()
 
-    # --- BODY EFFECTS (pre-cognitive) ---
-    # Intensity maps into biological drives
-    a7do.body.arousal = min(1.0, a7do.body.arousal + 0.3 * intensity)
-    a7do.body.fatigue = min(1.0, a7do.body.fatigue + 0.2 * intensity)
+    # World perception
+    a7do.world.observe(place)
 
-    # Wetness & hunger emerge more slowly
-    if etype in ("birth", "care"):
-        a7do.body.wetness = min(1.0, a7do.body.wetness + 0.15 * intensity)
-        a7do.body.hunger = min(1.0, a7do.body.hunger + 0.1 * intensity)
+    # Body modulation
+    a7do.body.apply_intensity(intensity)
+    a7do.body.apply_channels(channels)
 
-    # --- FAMILIARITY LEARNING ---
-    # Familiarity is passive, not symbolic
+    # Reflex/motor (pre-language, pre-intention)
+    reflex = a7do.body.maybe_reflex()
+    if reflex:
+        # record as a sensory-motor experience (still pre-language)
+        a7do.log.add(f"reflex: {reflex} @ {place}")
+
+    # Familiarity imprint (gated prebirth)
     a7do.familiarity.observe(
-        f"{place}:{pattern}",
-        weight=intensity
+        place=place,
+        channels=channels,
+        intensity=intensity
     )
 
-    # --- LOG (observer-visible, not internal thought) ---
-    a7do.log.add(
-        f"experienced pattern={pattern} place={place}"
-    )
+    # Observer log line
+    dominant = "ambient"
+    if channels:
+        dominant = max(channels.items(), key=lambda kv: float(kv[1]))[0]
+    a7do.log.add(f"experienced pattern={dominant} place={place}")
