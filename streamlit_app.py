@@ -35,7 +35,14 @@ mother = st.session_state.mother
 # World tick
 # -------------------------
 
+from a7do_core.gestation_bridge import GestationBridge
+
+if "gestation" not in st.session_state:
+    st.session_state.gestation = GestationBridge(a7do, clock)
+
+# Every refresh
 clock.tick(0.25)
+st.session_state.gestation.tick()
 
 # -------------------------
 # Prebirth sensory drip
