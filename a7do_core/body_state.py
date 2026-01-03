@@ -1,14 +1,23 @@
+# sledworld/a7do_core/body_state.py
+
+from world_core.heartbeat_field import HeartbeatField
+
 class BodyState:
     """
-    Binary body state only.
-    No interpretation here.
+    Internal physiological state of A7DO.
+    Runs continuously regardless of awareness.
     """
 
     def __init__(self):
-        self.is_asleep = True
+        # Fetal / newborn heart rate
+        self.heartbeat = HeartbeatField(bpm=130, noise=0.12, seed=3)
+        self.last_intensity = 0.0
 
-    def wake(self):
-        self.is_asleep = False
+    def tick(self, dt_seconds: float):
+        self.last_intensity = self.heartbeat.tick(dt_seconds)
 
-    def sleep(self):
-        self.is_asleep = True
+    def snapshot(self):
+        return {
+            "heartbeat_intensity": round(self.last_intensity, 3),
+            "heartbeat_bpm": self.heartbeat.bpm,
+        }
