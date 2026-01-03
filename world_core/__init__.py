@@ -1,4 +1,4 @@
-# sledworld/world_core/__init__.py
+# world_core/__init__.py
 
 """
 World physics layer for SLED World.
