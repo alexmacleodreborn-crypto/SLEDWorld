@@ -1,65 +1,61 @@
-from .body_state import BodyState
-from .familiarity import Familiarity
-from .memory import MemoryStore
+from a7do_core.body_state import BodyState
+from a7do_core.familiarity import Familiarity
+from a7do_core.memory import MemoryStore
 
 
 class A7DOState:
     """
     Core internal state of A7DO.
-    No world knowledge lives here.
-    No symbols.
-    No language.
+    Represents the organism, not the world.
     """
 
     def __init__(self):
-        # Existence & awareness
+        # -------------------------
+        # Lifecycle flags
+        # -------------------------
+        self.prebirth = True
         self.birthed = False
-        self.is_awake = True
+        self.is_awake = False
 
-        # Subsystems
+        # -------------------------
+        # Internal systems
+        # -------------------------
         self.body = BodyState()
         self.familiarity = Familiarity(gated=True)
         self.memory = MemoryStore()
 
-        # Observer-visible phenomenology (NOT cognition)
+        # -------------------------
+        # Observer-visible log
+        # -------------------------
         self.internal_log: list[str] = []
 
     # -------------------------
-    # Lifecycle
+    # Lifecycle transitions
     # -------------------------
 
-    def mark_birth(self):
+    def unlock_awareness(self):
         """
-        Birth opens the sensory gate.
-        Prebirth patterns remain, but future imprinting is full strength.
+        Transition from pre-birth to aware organism.
+        Called exactly once at birth.
         """
+        if self.birthed:
+            return
+
+        self.prebirth = False
         self.birthed = True
+
+        # Lift sensory gating
         self.familiarity.unlock()
-        self.internal_log.append("birth: sensory gate opened")
 
-    def sleep(self):
-        """
-        Sleep closes awareness and triggers replay.
-        """
-        self.is_awake = False
-        self.internal_log.append("sleep: replay and consolidation")
-
-        replayed = self.familiarity.replay()
-        if replayed:
-            self.internal_log.append(
-                f"replayed patterns: {replayed}"
-            )
-
-    def wake(self):
-        """
-        Awareness resumes.
-        """
-        self.is_awake = True
-        self.internal_log.append("wake: awareness resumes")
+        self.internal_log.append("awareness unlocked")
 
     # -------------------------
-    # Logging (observer only)
+    # Convenience helpers
     # -------------------------
 
-    def log(self, message: str):
-        self.internal_log.append(message)
+    def snapshot(self):
+        return {
+            "prebirth": self.prebirth,
+            "birthed": self.birthed,
+            "awake": self.is_awake,
+        }
