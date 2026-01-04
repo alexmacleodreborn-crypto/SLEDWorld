@@ -41,7 +41,7 @@ if auto:
 st.title("SLED World – World Core (No A7DO)")
 
 st.subheader("World Time")
-st.json(world.clock.snapshot())
+st.json(world["clock"].snapshot())
 
 st.subheader("Places")
 for name, place in world.places.items():
