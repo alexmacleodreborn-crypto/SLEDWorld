@@ -1,5 +1,4 @@
-# world_core/mother_bot.py
-
+import math
 from world_core.heartbeat_field import HeartbeatField
 
 
@@ -7,60 +6,48 @@ class MotherBot:
     """
     World agent representing the mother.
     Exists fully in world time.
+    Provides heartbeat + ambient sensory coupling to gestation.
     """
 
     def __init__(self, clock):
         self.clock = clock
 
-        # World-physics heartbeat (mother)
-        self.heartbeat = HeartbeatField(bpm=80.0)
+        # Maternal heartbeat (slower, stronger than foetal)
+        self.heartbeat = HeartbeatField(
+            bpm=80,            # typical resting maternal heart rate
+            amplitude=1.0,
+            name="mother"
+        )
 
-        # Sensory channels perceivable by fetus
-        self.motion_level = 0.2
-        self.voice_activity = 0.05
-        self.digestive_activity = 0.1
-
-        self._last_world_minutes = self.clock.total_minutes
-
-    # --------------------------------------------------
-    # WORLD TIME TICK
-    # --------------------------------------------------
+        self.last_tick_minutes = None
 
     def tick(self):
-        now = self.clock.total_minutes
-        delta = now - self._last_world_minutes
-        self._last_world_minutes = now
+        """
+        Advance mother state in world time.
+        """
+        # Determine elapsed world minutes since last tick
+        now_minutes = self.clock.total_minutes
+        if self.last_tick_minutes is None:
+            delta = 0.0
+        else:
+            delta = now_minutes - self.last_tick_minutes
+
+        self.last_tick_minutes = now_minutes
 
         if delta <= 0:
             return
 
-        # Advance mother heartbeat in world time
-        self.heartbeat.tick_minutes(delta)
+        # ✅ CORRECT call — HeartbeatField supports tick(minutes=…)
+        self.heartbeat.tick(minutes=delta)
 
-    # --------------------------------------------------
-    # SENSORY OUTPUT (pre-birth coupling)
-    # --------------------------------------------------
-
-    def sensory_snapshot(self):
+    def snapshot(self, world_datetime=None):
         """
-        Sensory signal emitted into gestation.
+        Observer-visible state.
         """
         return {
-            "heartbeat": self.heartbeat.amplitude(),
-            "motion": self.motion_level,
-            "voice": self.voice_activity,
-            "digestive": self.digestive_activity,
-        }
-
-    # --------------------------------------------------
-    # OBSERVER VIEW
-    # --------------------------------------------------
-
-    def snapshot(self, world_datetime):
-        return {
-            "world_time": str(world_datetime),
-            "heartbeat": self.heartbeat.snapshot(),
-            "motion_level": self.motion_level,
-            "voice_activity": self.voice_activity,
-            "digestive_activity": self.digestive_activity,
+            "agent": "mother",
+            "world_time": str(world_datetime) if world_datetime else None,
+            "heartbeat_bpm": self.heartbeat.bpm,
+            "heartbeat_phase": round(self.heartbeat.phase, 3),
+            "heartbeat_signal": round(self.heartbeat.current_signal(), 4),
         }
