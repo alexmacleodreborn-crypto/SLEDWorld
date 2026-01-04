@@ -44,7 +44,7 @@ st.subheader("World Time")
 st.json(world["clock"].snapshot())
 
 st.subheader("Places")
-for name, place in world.places.items():
+for name, place in world["places"].items():
     st.write(f"### {name}")
     st.json(place.snapshot())
 
