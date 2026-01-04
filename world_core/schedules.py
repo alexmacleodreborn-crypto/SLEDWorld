@@ -1,8 +1,10 @@
-def daily_routine(bot, world):
-    if bot.role == "dad":
-        if world.time_of_day < 8:
-            bot.location = "home"
-        elif world.time_of_day < 18:
-            bot.location = "work"
-        else:
-            bot.location = "home"
+def basic_adult_schedule(agent, clock):
+    hour = clock.world_datetime.hour
+
+    if 7 <= hour < 9:
+        return "commute"
+    if 9 <= hour < 17:
+        return "work"
+    if 17 <= hour < 22:
+        return "home"
+    return "sleep"
