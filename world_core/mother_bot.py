@@ -1,99 +1,71 @@
-from __future__ import annotations
-
+import random
 from world_core.heartbeat_field import HeartbeatField
 
 
 class MotherBot:
     """
-    World agent representing the mother.
-    Lives fully in world time.
-    Provides sensory coupling to gestation.
+    World agent: Mother.
+    Exists fully in world time.
     """
 
     def __init__(self, clock):
         self.clock = clock
+        self.agent = "mother"
 
-        # Mother's heartbeat (world-side)
-        self.heartbeat = HeartbeatField()
-        if hasattr(self.heartbeat, "bpm"):
-            self.heartbeat.bpm = 80  # typical resting maternal BPM
+        # Heartbeat (already working)
+        self.heartbeat = HeartbeatField(
+            bpm=80,
+            variability=5,
+            seed=11,
+        )
 
-        self._last_minutes = None
+        # Movement state (world-side only)
+        self.position = 0.0
+        self.velocity = 0.0
 
-    # -------------------------------------------------
-    # World tick
-    # -------------------------------------------------
+        self.rng = random.Random(21)
+
+    # -----------------------------------------
+    # WORLD TICK
+    # -----------------------------------------
 
     def tick(self):
         """
-        Advance mother state using world time.
+        Advances mother's physical state in world time.
         """
-        now_minutes = float(getattr(self.clock, "total_minutes", 0.0))
+        # Heartbeat advances with world time
+        self.heartbeat.tick_minutes(15)
 
-        if self._last_minutes is None:
-            delta = 0.0
-        else:
-            delta = now_minutes - self._last_minutes
+        # Slow, human-scale movement
+        accel = self.rng.uniform(-0.02, 0.02)
+        self.velocity += accel
+        self.velocity *= 0.95  # damping
+        self.position += self.velocity
 
-        self._last_minutes = now_minutes
+    # -----------------------------------------
+    # SENSORY SNAPSHOT (for gestation bridge)
+    # -----------------------------------------
 
-        # Advance heartbeat using whatever API exists
-        if hasattr(self.heartbeat, "tick"):
-            try:
-                self.heartbeat.tick(minutes=delta)
-            except TypeError:
-                try:
-                    self.heartbeat.tick(delta)
-                except Exception:
-                    pass
-        elif hasattr(self.heartbeat, "tick_minutes"):
-            try:
-                self.heartbeat.tick_minutes(delta)
-            except Exception:
-                pass
-
-    # -------------------------------------------------
-    # Sensory bridge (THIS FIXES YOUR ERROR)
-    # -------------------------------------------------
-
-    def sensory_snapshot(self) -> dict:
+    def sensory_snapshot(self):
         """
-        Return maternal sensory signals available to the fetus.
-        This is pre-symbolic and intensity-only.
+        Returns pre-symbolic signals for fetus.
         """
-        heartbeat_signal = 0.0
-
-        # Extract heartbeat signal safely
-        for attr in ("current_signal", "signal", "value"):
-            if hasattr(self.heartbeat, attr):
-                try:
-                    heartbeat_signal = float(getattr(self.heartbeat, attr))
-                    break
-                except Exception:
-                    pass
-
-        if callable(getattr(self.heartbeat, "current_signal", None)):
-            try:
-                heartbeat_signal = float(self.heartbeat.current_signal())
-            except Exception:
-                pass
-
         return {
-            "heartbeat": heartbeat_signal,
-            "pressure": 0.6,   # womb pressure baseline
-            "sound": 0.4,      # muffled maternal sounds
-            "motion": 0.2,     # maternal movement
-            "warmth": 0.8,     # thermal coupling
+            "heartbeat": self.heartbeat.current(),
+            "motion": abs(self.velocity),
+            "pressure": min(1.0, abs(self.velocity) * 2.0),
         }
 
-    # -------------------------------------------------
-    # Observer view
-    # -------------------------------------------------
+    # -----------------------------------------
+    # OBSERVER VIEW
+    # -----------------------------------------
 
-    def snapshot(self, world_datetime=None) -> dict:
+    def snapshot(self, world_datetime):
         return {
-            "agent": "mother",
-            "world_time": str(world_datetime) if world_datetime else None,
-            "heartbeat_bpm": getattr(self.heartbeat, "bpm", None),
-            "heartbeat_phase": getattr(self.heartbeat, "phase", None),
+            "agent": self.agent,
+            "world_time": str(world_datetime),
+            "heartbeat_bpm": self.heartbeat.bpm,
+            "heartbeat_phase": round(self.heartbeat.phase, 3),
+            "velocity": round(self.velocity, 3),
+            "position": round(self.position, 3),
         }
