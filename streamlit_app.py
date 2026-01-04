@@ -23,7 +23,7 @@ step_real_seconds = st.sidebar.selectbox("Tick step (real seconds)", [0.25, 0.5,
 
 if st.sidebar.button("Tick once"):
     world.clock.tick(real_seconds=step_real_seconds)
-    world.tick()
+    world["clock"].tick(real_seconds=step_real_seconds)
 
 auto = st.sidebar.checkbox("Auto tick", value=True)
 
