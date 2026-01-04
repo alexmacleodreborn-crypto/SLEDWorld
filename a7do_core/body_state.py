@@ -1,27 +1,31 @@
+# a7do_core/body_state.py
+
 from world_core.heartbeat_field import HeartbeatField
+
 
 class BodyState:
     """
-    Pre-symbolic physiological body.
+    Subjective body state of A7DO.
+    Has no concept of time, only rhythmic entrainment.
     """
 
     def __init__(self):
-        # Internal heartbeat (faster, noisier)
-        self.internal_heartbeat = HeartbeatField(
-            bpm_mean=110.0,
-            bpm_variance=20.0,
-            seed=99
-        )
-        self.last_level = 0.0
+        # Internal heartbeat (entrained, not causal)
+        self.internal_heartbeat = HeartbeatField(bpm=120.0)
 
-    def entrain(self, external_heartbeat: float, minutes: float):
+        # Primitive proprioception placeholders
+        self.tension = 0.0
+        self.motion = 0.0
+
+    def entrain(self, external_heartbeat_value):
         """
-        Entrain internal rhythm to external signal.
+        Pre-birth coupling: internal rhythm follows mother.
         """
-        internal = self.internal_heartbeat.tick(minutes)
-        self.last_level = (internal * 0.7) + (external_heartbeat * 0.3)
+        self.internal_heartbeat.entrain(external_heartbeat_value)
 
     def snapshot(self):
         return {
-            "heartbeat_level": round(self.last_level, 3)
+            "heartbeat": self.internal_heartbeat.snapshot(),
+            "tension": self.tension,
+            "motion": self.motion,
         }
