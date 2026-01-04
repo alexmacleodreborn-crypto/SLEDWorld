@@ -46,7 +46,7 @@ st.json(world["clock"].snapshot())
 st.subheader("Places")
 for name, place in world["places"].items():
     st.write(f"### {name}")
-    st.json(place.snapshot())
+    st.json(place)
 
 st.subheader("Agents")
 st.json([a.snapshot() for a in world.agents])
