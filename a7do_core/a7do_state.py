@@ -1,52 +1,65 @@
-class BodyState:
+from .body_state import BodyState
+from .familiarity import Familiarity
+from .memory import MemoryStore
+
+
+class A7DOState:
     """
-    Physiological substrate.
-    No cognition. No symbols. No time awareness.
+    Subjective cognitive entity (A7DO).
+
+    - No access to world time
+    - No symbols
+    - Phase changes only via gates
     """
 
     def __init__(self):
-        # ---------------------------------------------
-        # Core arousal state
-        # ---------------------------------------------
-        self.awake = False  # REQUIRED: wake/sleep gate
+        # Core identity
+        self.phase = "prebirth"   # prebirth | postbirth | infant | child
+        self.aware = False
 
-        # ---------------------------------------------
-        # Baseline physiological signals
-        # ---------------------------------------------
-        self.arousal = 0.1
-        self.fatigue = 0.0
+        # Internal systems
+        self.body = BodyState()
+        self.familiarity = Familiarity(gated=True)
+        self.memory = MemoryStore()
 
-    # =================================================
-    # BODY TRANSITIONS
-    # =================================================
+        # Observer-visible internal log
+        self.internal_log = []
+
+    # ===============================
+    # GATED TRANSITIONS
+    # ===============================
+
+    def unlock_awareness(self):
+        if not self.aware:
+            self.aware = True
+            self.phase = "postbirth"
+            self.familiarity.unlock()
+            self.internal_log.append("birth: awareness unlocked")
+
+    # ===============================
+    # WAKE / SLEEP
+    # ===============================
 
     def wake(self):
-        self.awake = True
-        self.arousal = min(1.0, self.arousal + 0.4)
-        self.fatigue = max(0.0, self.fatigue - 0.2)
+        if not self.aware:
+            return
+        self.body.wake()
+        self.internal_log.append("wake")
 
     def sleep(self):
-        self.awake = False
-        self.arousal = max(0.0, self.arousal - 0.3)
-        self.fatigue = min(1.0, self.fatigue + 0.2)
+        self.body.sleep()
+        replayed = self.familiarity.replay()
+        self.internal_log.append(
+            f"sleep: replayed {len(replayed)} patterns"
+        )
 
-    # =================================================
-    # BODY TICK (future use)
-    # =================================================
-
-    def tick(self):
-        if self.awake:
-            self.fatigue = min(1.0, self.fatigue + 0.01)
-        else:
-            self.fatigue = max(0.0, self.fatigue - 0.02)
-
-    # =================================================
-    # OBSERVER SNAPSHOT
-    # =================================================
+    # ===============================
+    # SNAPSHOT (observer only)
+    # ===============================
 
     def snapshot(self):
         return {
-            "awake": self.awake,
-            "arousal": round(self.arousal, 3),
-            "fatigue": round(self.fatigue, 3),
+            "phase": self.phase,
+            "aware": self.aware,
+            "body_awake": self.body.awake,
         }
