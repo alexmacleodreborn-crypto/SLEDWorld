@@ -4,51 +4,48 @@ import random
 
 class BodyState:
     """
-    Pre-symbolic physiological substrate.
+    Physiological substrate.
 
-    - No language
-    - No concepts
-    - No world awareness
-    - Stores only movement, contact, pressure patterns
+    - No cognition
+    - No symbols
+    - No access to world time
+    - Pre-birth capable
+    - Stores repetition-based bodily memory
     """
 
-    def __init__(self):
+    # ---------------------------------------------
+    # Body segment map (numeric, pre-symbolic)
+    # ---------------------------------------------
+    SEGMENTS = {
+        1: "head",
+        2: "mouth",
+        3: "left_hand",
+        4: "right_hand",
+        5: "left_arm",
+        6: "right_arm",
+        7: "torso",
+        8: "left_leg",
+        9: "right_leg",
+    }
+
+    def __init__(self, seed: int = 7):
+        self.rng = random.Random(seed)
+
         # ---------------------------------------------
-        # Arousal state
+        # Core arousal state
         # ---------------------------------------------
         self.awake = False
         self.arousal = 0.1
         self.fatigue = 0.0
 
         # ---------------------------------------------
-        # Body segments (indexed, not named)
-        # ---------------------------------------------
-        self.segments = {
-            0: "head",
-            1: "torso",
-            2: "left_arm",
-            3: "left_hand",
-            4: "right_arm",
-            5: "right_hand",
-            6: "left_leg",
-            7: "right_leg",
-            8: "mouth",
-            9: "fingers",
-            10: "feet",
-        }
-
-        # ---------------------------------------------
-        # Local body memory (non-cognitive)
+        # Movement + contact memory (pre-symbolic)
         # ---------------------------------------------
         self.motion_counts = defaultdict(int)
         self.contact_counts = defaultdict(int)
 
-        # Last detected activity (observer only)
-        self.last_motion = None
-        self.last_contact = None
-
-        # Random source for micro-movements
-        self.rng = random.Random(42)
+        self.last_motion = None          # segment id
+        self.last_contact = None         # (seg_a, seg_b)
 
     # =================================================
     # BODY TRANSITIONS
@@ -65,59 +62,71 @@ class BodyState:
         self.fatigue = min(1.0, self.fatigue + 0.2)
 
     # =================================================
-    # PRE-BIRTH / INFANT BODY ACTIVITY
+    # PHYSIOLOGICAL TICK
     # =================================================
-
-    def spontaneous_movement(self):
-        """
-        Generates random low-level body movement.
-        Pre-birth and infant-safe.
-        """
-        seg = self.rng.choice(list(self.segments.keys()))
-        self.motion_counts[seg] += 1
-        self.last_motion = seg
-
-    def contact(self, seg_a: int, seg_b: int):
-        """
-        Records contact between two body segments.
-        """
-        key = tuple(sorted((seg_a, seg_b)))
-        self.contact_counts[key] += 1
-        self.last_contact = key
 
     def tick(self):
         """
-        Body tick.
-        Runs regardless of awareness.
+        Low-level body drift.
         """
-        # Fatigue dynamics
         if self.awake:
             self.fatigue = min(1.0, self.fatigue + 0.01)
         else:
             self.fatigue = max(0.0, self.fatigue - 0.02)
 
-        # Spontaneous motion (more frequent pre-birth)
-        if self.rng.random() < 0.3:
-            self.spontaneous_movement()
+    # =================================================
+    # PRE-BIRTH / INFANT MOVEMENT
+    # =================================================
 
-        # Self-contact (e.g. hand to mouth)
-        if self.rng.random() < 0.1:
-            a = self.rng.choice(list(self.segments.keys()))
-            b = self.rng.choice(list(self.segments.keys()))
-            if a != b:
-                self.contact(a, b)
+    def spontaneous_motion(self):
+        """
+        Random limb movement.
+        Pre-symbolic repetition generator.
+        """
+        seg = self.rng.choice(list(self.SEGMENTS.keys()))
+        self.motion_counts[seg] += 1
+        self.last_motion = seg
+        return seg
+
+    def spontaneous_contact(self):
+        """
+        Random body-to-body contact.
+        e.g. hand → mouth, knee → torso.
+        """
+        a, b = self.rng.sample(list(self.SEGMENTS.keys()), 2)
+        key = tuple(sorted((a, b)))
+        self.contact_counts[key] += 1
+        self.last_contact = key
+        return key
 
     # =================================================
-    # OBSERVER SNAPSHOT
+    # OBSERVER SNAPSHOT (JSON SAFE)
     # =================================================
 
     def snapshot(self):
+        """
+        Observer-only view.
+
+        Converts tuple keys → strings
+        WITHOUT altering internal representation.
+        """
+
+        contact_counts_serializable = {
+            f"{a}-{b}": count
+            for (a, b), count in self.contact_counts.items()
+        }
+
         return {
             "awake": self.awake,
             "arousal": round(self.arousal, 3),
             "fatigue": round(self.fatigue, 3),
+
             "last_motion_segment": self.last_motion,
-            "last_contact_segments": self.last_contact,
+            "last_contact_segments": (
+                f"{self.last_contact[0]}-{self.last_contact[1]}"
+                if self.last_contact else None
+            ),
+
             "motion_counts": dict(self.motion_counts),
-            "contact_counts": dict(self.contact_counts),
+            "contact_counts": contact_counts_serializable,
         }
