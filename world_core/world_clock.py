@@ -1,27 +1,22 @@
 from datetime import datetime, timedelta
 
-
 class WorldClock:
     """
-    Accelerated real-world clock.
+    Single authoritative world time.
     """
 
-    def __init__(self, acceleration: int = 60):
-        self.acceleration = acceleration
-        self.start_time = datetime(2025, 1, 1, 0, 0, 0)
-        self.world_datetime = self.start_time
-        self.total_minutes = 0.0
+    def __init__(self, start=None, acceleration=60):
+        self.acceleration = acceleration  # world seconds per real second
+        self.world_datetime = start or datetime(2025, 1, 1, 6, 0, 0)
 
-    def tick(self, minutes: float):
-        """
-        Advance world time deterministically.
-        """
-        self.total_minutes += minutes
-        self.world_datetime = self.start_time + timedelta(minutes=self.total_minutes)
+    def tick(self, real_seconds=1.0):
+        delta = timedelta(seconds=real_seconds * self.acceleration)
+        self.world_datetime += delta
 
     def snapshot(self):
         return {
-            "datetime": str(self.world_datetime),
-            "total_minutes": round(self.total_minutes, 2),
-            "day": int(self.total_minutes // (24 * 60)),
+            "datetime": self.world_datetime.isoformat(),
+            "hour": self.world_datetime.hour,
+            "day": self.world_datetime.strftime("%A"),
+            "is_day": 6 <= self.world_datetime.hour < 20,
         }
