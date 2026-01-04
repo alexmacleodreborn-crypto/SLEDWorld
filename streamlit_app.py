@@ -57,7 +57,7 @@ cycle = st.session_state.cycle
 # =========================
 
 clock.tick(900)
-mother.tick()
+mother.tick(clock.world_datetime)
 
 if not a7do.aware:
     gestation.tick()
