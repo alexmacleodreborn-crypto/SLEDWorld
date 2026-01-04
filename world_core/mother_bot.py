@@ -2,30 +2,24 @@ from world_core.heartbeat_field import HeartbeatField
 
 class MotherBot:
     """
-    Mother exists fully inside world time.
-    A7DO never sees this directly.
+    World agent.
+    Fully time-coupled to WorldClock.
     """
 
     def __init__(self, clock):
         self.clock = clock
+        self.heartbeat = HeartbeatField(bpm=80.0)
 
-        self.heartbeat = HeartbeatField(
-            bpm_mean=72.0,
-            bpm_variance=8.0,
-            seed=21
-        )
+    def tick(self):
+        """
+        Advance internal physiology using world delta time.
+        """
+        minutes = self.clock.delta_minutes
+        self.heartbeat.tick(minutes)
 
-    def tick(self, minutes: float):
-        """
-        Advance physiological rhythm with world time.
-        """
-        return self.heartbeat.tick(minutes)
-
-    def snapshot(self):
-        """
-        Observer-only diagnostic.
-        """
+    def snapshot(self, world_datetime):
         return {
-            "world_time": self.clock.world_datetime.isoformat(),
-            "heartbeat_level": round(self.heartbeat.last_level, 3),
+            "world_time": world_datetime.isoformat(),
+            "heartbeat_phase": round(self.heartbeat.phase, 4),
+            "bpm": self.heartbeat.bpm,
         }
