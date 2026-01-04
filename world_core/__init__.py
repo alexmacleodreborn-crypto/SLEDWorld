@@ -1,18 +1,11 @@
-# world_core/__init__.py
-
 """
-world_core
+world_core package
 
-Objective world simulation:
-- Time
-- Physics
-- Agents (MotherBot, later others)
-- No cognition
-- No subjective state
+Pure world-layer primitives.
+NO runtime agents imported here.
 """
 
-from .world_clock import WorldClock
-from .mother_bot import MotherBot
-from .heartbeat_field import HeartbeatField
-
-
+__all__ = [
+    "world_clock",
+    "heartbeat_field",
+]
