@@ -8,7 +8,7 @@ class BodyState:
         # ---------------------------------------------
         # Core arousal state
         # ---------------------------------------------
-        self.awake = False  # <-- THIS IS WHAT WAS MISSING
+        self.awake = False  # REQUIRED: wake/sleep gate
 
         # ---------------------------------------------
         # Baseline physiological signals
@@ -31,7 +31,7 @@ class BodyState:
         self.fatigue = min(1.0, self.fatigue + 0.2)
 
     # =================================================
-    # BODY TICK (optional, future use)
+    # BODY TICK (future use)
     # =================================================
 
     def tick(self):
