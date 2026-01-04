@@ -60,12 +60,11 @@ class MotherBot:
     # OBSERVER VIEW
     # -----------------------------------------
 
-    def snapshot(self, world_datetime):
-        return {
-            "agent": self.agent,
-            "world_time": str(world_datetime),
-            "heartbeat_bpm": self.heartbeat.bpm,
-            "heartbeat_phase": round(self.heartbeat.phase, 3),
-            "velocity": round(self.velocity, 3),
-            "position": round(self.position, 3),
-        }
+    def observer_snapshot(self):
+    return {
+        "agent": self.agent,
+        "heartbeat_bpm": self.heartbeat.bpm,
+        "heartbeat_phase": round(self.heartbeat.phase, 3),
+        "velocity": round(self.velocity, 3),
+        "position": round(self.position, 3),
+    }
