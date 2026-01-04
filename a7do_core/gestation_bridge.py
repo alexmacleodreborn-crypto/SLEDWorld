@@ -1,36 +1,36 @@
 class GestationBridge:
     """
-    Couples world time, mother, and A7DO pre-birth.
+    Couples mother world signals into A7DO prebirth experience.
     """
 
-    def __init__(self, a7do, mother, clock, gestation_days=180):
+    def __init__(self, a7do, mother, clock):
         self.a7do = a7do
         self.mother = mother
         self.clock = clock
-        self.gestation_days = gestation_days
+
+        self.elapsed_days = 0
         self.completed = False
+        self.phase = "gestation"
 
     def tick(self):
         if self.completed:
             return
 
-        progress = self.clock.days_elapsed / self.gestation_days
+        self.elapsed_days = int(self.clock.total_minutes // (24 * 60))
 
-        mother_signal = self.mother.snapshot(self.clock.world_minutes)
+        signals = self.mother.sensory_snapshot()
 
+        # Convert maternal signals into gated familiarity
         self.a7do.familiarity.observe(
             place="womb",
-            channels={
-                "heartbeat": mother_signal["heartbeat"],
-                "pressure": 0.4,
-                "sound": 0.2,
-            },
-            intensity=progress
+            channels=signals,
+            intensity=0.2,
         )
 
-        self.a7do.body.apply_intensity(progress)
+        # Advance internal body (heartbeat etc)
+        self.a7do.body.tick()
 
-        if progress >= 1.0:
+        if self.elapsed_days >= 180:
             self.completed = True
+            self.phase = "birth_ready"
             self.a7do.unlock_awareness()
-            self.a7do.mark_birthed()
