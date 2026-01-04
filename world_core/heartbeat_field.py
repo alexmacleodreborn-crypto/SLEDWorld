@@ -1,76 +1,41 @@
+import math
 import random
-from world_core.heartbeat_field import HeartbeatField
 
-
-class MotherBot:
+class HeartbeatField:
     """
-    World agent: Mother.
-    Exists fully in world time.
+    Continuous heartbeat oscillator.
+    Exists entirely in world time.
+    No cognition, no symbols.
     """
 
-    def __init__(self, clock):
-        self.clock = clock
-        self.agent = "mother"
+    def __init__(self, bpm: float = 80.0, variability: float = 5.0, seed: int | None = None):
+        self.base_bpm = bpm
+        self.variability = variability
+        self.phase = 0.0
 
-        # Heartbeat (world-driven, already correct)
-        self.heartbeat = HeartbeatField(
-            bpm=80,
-            variability=5,
-            seed=11,
-        )
-
-        # Movement state (world-side only)
-        self.position = 0.0
-        self.velocity = 0.0
-
-        self.rng = random.Random(21)
+        self.rng = random.Random(seed)
 
     # -----------------------------------------
-    # WORLD TICK
+    # WORLD TIME ADVANCE
     # -----------------------------------------
 
-    def tick(self, minutes: float):
+    def tick_minutes(self, minutes: float):
         """
-        Advances mother's physical state in world time.
-
-        IMPORTANT:
-        - minutes is supplied by WorldClock / Streamlit loop
-        - this keeps heartbeat + motion synced to world time
+        Advance heartbeat oscillator by world minutes.
         """
+        # Slight biological variability
+        bpm = self.base_bpm + self.rng.uniform(-self.variability, self.variability)
+        hz = bpm / 60.0
 
-        # Heartbeat advances with world time
-        self.heartbeat.tick_minutes(minutes)
-
-        # Slow, human-scale movement
-        accel = self.rng.uniform(-0.02, 0.02)
-        self.velocity += accel
-        self.velocity *= 0.95  # damping
-        self.position += self.velocity
+        # Advance phase
+        self.phase += 2 * math.pi * hz * minutes
 
     # -----------------------------------------
-    # SENSORY SNAPSHOT (for gestation bridge)
+    # CURRENT SIGNAL
     # -----------------------------------------
 
-    def sensory_snapshot(self):
+    def current(self) -> float:
         """
-        Returns pre-symbolic signals for fetus.
+        Returns normalized heartbeat signal [0..1].
         """
-        return {
-            "heartbeat": self.heartbeat.current(),
-            "motion": abs(self.velocity),
-            "pressure": min(1.0, abs(self.velocity) * 2.0),
-        }
-
-    # -----------------------------------------
-    # OBSERVER VIEW
-    # -----------------------------------------
-
-    def snapshot(self, world_datetime):
-        return {
-            "agent": self.agent,
-            "world_time": str(world_datetime),
-            "heartbeat_bpm": self.heartbeat.bpm,
-            "heartbeat_phase": round(self.heartbeat.phase, 3),
-            "velocity": round(self.velocity, 3),
-            "position": round(self.position, 3),
-        }
+        return 0.5 + 0.5 * math.sin(self.phase)
