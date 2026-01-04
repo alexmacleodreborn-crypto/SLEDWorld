@@ -1,25 +1,27 @@
-import math
+from datetime import datetime, timedelta
 
-class HeartbeatField:
+class WorldClock:
     """
-    Simple phase-based heartbeat oscillator.
-    Phase advances based on elapsed minutes.
+    Absolute world time.
+    Owns time. Everyone else receives deltas.
     """
 
-    def __init__(self, bpm: float = 80.0):
-        self.bpm = bpm
-        self.phase = 0.0
+    def __init__(self, acceleration: float = 60.0):
+        self.acceleration = acceleration  # world seconds per real second
+        self.world_datetime = datetime(2025, 1, 1, 0, 0, 0)
+        self.delta_minutes = 0.0
 
-    def tick(self, minutes: float):
+    def tick(self, seconds: float = 1.0):
         """
-        Advance heartbeat phase.
-
-        minutes: elapsed time in minutes (float)
+        Advance world time by `seconds * acceleration`.
         """
-        if minutes <= 0:
-            return self.phase
+        delta = timedelta(seconds=seconds * self.acceleration)
+        self.world_datetime += delta
+        self.delta_minutes = delta.total_seconds() / 60.0
 
-        hz = self.bpm / 60.0  # beats per second
-        self.phase += 2 * math.pi * hz * (minutes / 60.0)
-        self.phase %= 2 * math.pi
-        return self.phase
+    def snapshot(self):
+        return {
+            "world_time": self.world_datetime.isoformat(),
+            "delta_minutes": round(self.delta_minutes, 4),
+            "acceleration": self.acceleration,
+        }
