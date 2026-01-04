@@ -1,31 +1,57 @@
-# a7do_core/body_state.py
-
-from world_core.heartbeat_field import HeartbeatField
+from experience_layer.heartbeat_field import HeartbeatField
 
 
 class BodyState:
     """
-    Subjective body state of A7DO.
-    Has no concept of time, only rhythmic entrainment.
+    Pre-symbolic bodily substrate.
+    No concepts, no language, only regulation.
     """
 
     def __init__(self):
-        # Internal heartbeat (entrained, not causal)
-        self.internal_heartbeat = HeartbeatField(bpm=120.0)
+        # Internal heartbeat (subjective, fetal → infant)
+        self.internal_heartbeat = HeartbeatField(
+            bpm=120,        # fetal baseline
+            amplitude=0.6
+        )
 
-        # Primitive proprioception placeholders
-        self.tension = 0.0
-        self.motion = 0.0
+        # Primitive regulation states
+        self.arousal = 0.0
+        self.pressure = 0.5
+        self.warmth = 0.7
 
-    def entrain(self, external_heartbeat_value):
+    # --------------------------------------------------
+    # REQUIRED METHOD (THIS FIXES YOUR CRASH)
+    # --------------------------------------------------
+
+    def tick(self, minutes: float = 1.0):
         """
-        Pre-birth coupling: internal rhythm follows mother.
+        Advance internal bodily processes.
+        Called every gestation / wake tick.
         """
-        self.internal_heartbeat.entrain(external_heartbeat_value)
+        # Heartbeat progresses independently of world meaning
+        try:
+            self.internal_heartbeat.tick(minutes=minutes)
+        except TypeError:
+            # fallback if API differs
+            self.internal_heartbeat.tick(minutes)
+
+        # Gentle homeostasis drift
+        self.arousal *= 0.98
+        self.pressure = min(1.0, max(0.0, self.pressure))
+        self.warmth = min(1.0, max(0.0, self.warmth))
+
+    # --------------------------------------------------
+    # Observer-only view
+    # --------------------------------------------------
 
     def snapshot(self):
         return {
-            "heartbeat": self.internal_heartbeat.snapshot(),
-            "tension": self.tension,
-            "motion": self.motion,
+            "heartbeat_signal": (
+                self.internal_heartbeat.current_signal()
+                if hasattr(self.internal_heartbeat, "current_signal")
+                else None
+            ),
+            "arousal": round(self.arousal, 3),
+            "pressure": round(self.pressure, 3),
+            "warmth": round(self.warmth, 3),
         }
