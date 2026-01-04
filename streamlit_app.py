@@ -49,6 +49,6 @@ for name, place in world.places.items():
     st.json(world.places)
 
 st.subheader("Agents")
-st.json(world.mother.snapshot(world.clock.world_datetime))
+st.json(st.session_state.mother.snapshot(st.session_state.clock.world_datetime))
 
 st.caption("World Core only: time + places + agents. No A7DO, no gestation, no gating yet.")
