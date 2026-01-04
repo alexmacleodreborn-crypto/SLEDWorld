@@ -1,101 +1,52 @@
-from .body_state import BodyState
-from .familiarity import Familiarity
-from .memory import MemoryStore
-
-
-class A7DOState:
+class BodyState:
     """
-    Subjective cognitive entity (A7DO).
-
-    Core principles:
-    - Has NO access to world time
-    - No symbolic knowledge
-    - Phase changes occur only through gated events
-    - Wake is NOT valid pre-birth
-    - Sleep exists both pre- and post-birth (physiological)
+    Physiological substrate.
+    No cognition. No symbols. No time awareness.
     """
 
     def __init__(self):
-        # --------------------------------------------------
-        # Core identity
-        # --------------------------------------------------
-        self.phase = "prebirth"   # prebirth | postbirth | infant | child
-        self.aware = False        # awareness gate (birth)
+        # ---------------------------------------------
+        # Core arousal state
+        # ---------------------------------------------
+        self.awake = False  # <-- THIS IS WHAT WAS MISSING
 
-        # --------------------------------------------------
-        # Internal systems (always present)
-        # --------------------------------------------------
-        self.body = BodyState()
-        self.familiarity = Familiarity(gated=True)
-        self.memory = MemoryStore()
+        # ---------------------------------------------
+        # Baseline physiological signals
+        # ---------------------------------------------
+        self.arousal = 0.1
+        self.fatigue = 0.0
 
-        # --------------------------------------------------
-        # Observer-visible internal log
-        # --------------------------------------------------
-        self.internal_log = []
-
-    # ==================================================
-    # GATED TRANSITIONS
-    # ==================================================
-
-    def unlock_awareness(self):
-        """
-        Birth gate.
-        This is the ONLY place awareness becomes true.
-        """
-        if not self.aware:
-            self.aware = True
-            self.phase = "postbirth"
-            self.familiarity.unlock()
-            self.internal_log.append("birth: awareness unlocked")
-
-    # ==================================================
-    # WAKE / SLEEP (body-driven)
-    # ==================================================
+    # =================================================
+    # BODY TRANSITIONS
+    # =================================================
 
     def wake(self):
-        """
-        Wake transition.
-
-        IMPORTANT:
-        - Wake is INVALID pre-birth
-        - Pre-birth arousal exists, but not 'wake'
-        """
-        if not self.aware:
-            # Pre-birth: ignore wake entirely
-            return
-
-        self.body.wake()
-        self.internal_log.append("wake: arousal increased")
+        self.awake = True
+        self.arousal = min(1.0, self.arousal + 0.4)
+        self.fatigue = max(0.0, self.fatigue - 0.2)
 
     def sleep(self):
-        """
-        Sleep transition.
+        self.awake = False
+        self.arousal = max(0.0, self.arousal - 0.3)
+        self.fatigue = min(1.0, self.fatigue + 0.2)
 
-        - Valid pre-birth and post-birth
-        - Triggers consolidation
-        """
-        self.body.sleep()
+    # =================================================
+    # BODY TICK (optional, future use)
+    # =================================================
 
-        # Sleep replay (pre-symbolic)
-        replayed = self.familiarity.replay()
-        if replayed:
-            self.internal_log.append(
-                f"sleep: replayed {len(replayed)} patterns"
-            )
+    def tick(self):
+        if self.awake:
+            self.fatigue = min(1.0, self.fatigue + 0.01)
         else:
-            self.internal_log.append("sleep: quiet consolidation")
+            self.fatigue = max(0.0, self.fatigue - 0.02)
 
-    # ==================================================
+    # =================================================
     # OBSERVER SNAPSHOT
-    # ==================================================
+    # =================================================
 
     def snapshot(self):
-        """
-        Observer-only view of subjective state.
-        """
         return {
-            "phase": self.phase,
-            "aware": self.aware,
-            "body_awake": self.body.awake,
+            "awake": self.awake,
+            "arousal": round(self.arousal, 3),
+            "fatigue": round(self.fatigue, 3),
         }
