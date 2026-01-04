@@ -17,7 +17,7 @@ world = st.session_state.world
 st.sidebar.header("World Controls")
 
 accel = st.sidebar.slider("Acceleration (world sec per real sec)", 1, 3600, 120, 1)
-world.clock.acceleration = accel
+world["clock"].acceleration = accel
 
 step_real_seconds = st.sidebar.selectbox("Tick step (real seconds)", [0.25, 0.5, 1.0, 2.0], index=2)
 
