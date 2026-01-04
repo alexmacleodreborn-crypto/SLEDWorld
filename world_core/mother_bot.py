@@ -1,57 +1,49 @@
-from a7do_core.heartbeat_field import HeartbeatField
+# world_core/mother_bot.py
+
+from world_core.heartbeat_field import HeartbeatField
 
 
 class MotherBot:
     """
-    Embodied world agent.
-    Represents mother as continuous presence.
+    World agent representing the mother.
+    Exists fully in world time.
     """
 
     def __init__(self, clock):
         self.clock = clock
 
-        # Physiological systems
-        self.heartbeat = HeartbeatField(bpm=80.0)   # adult resting
-        self.breathing_rate = 14.0                  # breaths per minute
+        # World-physics heartbeat (mother)
+        self.heartbeat = HeartbeatField(bpm=80.0)
 
-        # Sensory emission (what fetus perceives)
-        self.motion_level = 0.2                     # walking / shifting
-        self.voice_activity = 0.05                  # muffled speech
-        self.digestive_activity = 0.1               # stomach sounds
+        # Sensory channels perceivable by fetus
+        self.motion_level = 0.2
+        self.voice_activity = 0.05
+        self.digestive_activity = 0.1
 
-        # Internal tracking
-        self._last_clock_minutes = self.clock.total_minutes
+        self._last_world_minutes = self.clock.total_minutes
 
     # --------------------------------------------------
-    # WORLD-DRIVEN TICK
+    # WORLD TIME TICK
     # --------------------------------------------------
 
     def tick(self):
-        """
-        Advance mother state based on world time.
-        """
-        now_minutes = self.clock.total_minutes
-        delta = now_minutes - self._last_clock_minutes
-        self._last_clock_minutes = now_minutes
+        now = self.clock.total_minutes
+        delta = now - self._last_world_minutes
+        self._last_world_minutes = now
 
         if delta <= 0:
             return
 
-        # Advance physiology
+        # Advance mother heartbeat in world time
         self.heartbeat.tick_minutes(delta)
 
-        # Slowly vary activity (life is noisy)
-        self.motion_level = min(1.0, max(0.0, self.motion_level + 0.01))
-        self.voice_activity = min(0.3, max(0.0, self.voice_activity + 0.005))
-        self.digestive_activity = min(0.3, max(0.0, self.digestive_activity + 0.003))
-
     # --------------------------------------------------
-    # SENSORY OUTPUT (to gestation bridge)
+    # SENSORY OUTPUT (pre-birth coupling)
     # --------------------------------------------------
 
     def sensory_snapshot(self):
         """
-        What A7DO can sense from mother (pre-birth).
+        Sensory signal emitted into gestation.
         """
         return {
             "heartbeat": self.heartbeat.amplitude(),
@@ -61,14 +53,14 @@ class MotherBot:
         }
 
     # --------------------------------------------------
-    # OBSERVER SNAPSHOT
+    # OBSERVER VIEW
     # --------------------------------------------------
 
     def snapshot(self, world_datetime):
         return {
             "world_time": str(world_datetime),
             "heartbeat": self.heartbeat.snapshot(),
-            "motion_level": round(self.motion_level, 3),
-            "voice_activity": round(self.voice_activity, 3),
-            "digestive_activity": round(self.digestive_activity, 3),
+            "motion_level": self.motion_level,
+            "voice_activity": self.voice_activity,
+            "digestive_activity": self.digestive_activity,
         }
