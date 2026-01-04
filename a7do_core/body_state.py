@@ -1,16 +1,16 @@
-from experience_layer.heartbeat_field import HeartbeatField
+from world_core.heartbeat_field import HeartbeatField
 
 
 class BodyState:
     """
     Pre-symbolic bodily substrate.
-    No concepts, no language, only regulation.
+    No concepts. No language. Only regulation.
     """
 
     def __init__(self):
-        # Internal heartbeat (subjective, fetal → infant)
+        # Internal fetal heartbeat (subjective)
         self.internal_heartbeat = HeartbeatField(
-            bpm=120,        # fetal baseline
+            bpm=120,
             amplitude=0.6
         )
 
@@ -19,38 +19,20 @@ class BodyState:
         self.pressure = 0.5
         self.warmth = 0.7
 
-    # --------------------------------------------------
-    # REQUIRED METHOD (THIS FIXES YOUR CRASH)
-    # --------------------------------------------------
-
     def tick(self, minutes: float = 1.0):
         """
         Advance internal bodily processes.
-        Called every gestation / wake tick.
         """
-        # Heartbeat progresses independently of world meaning
-        try:
-            self.internal_heartbeat.tick(minutes=minutes)
-        except TypeError:
-            # fallback if API differs
-            self.internal_heartbeat.tick(minutes)
+        self.internal_heartbeat.tick(minutes=minutes)
 
-        # Gentle homeostasis drift
+        # Homeostatic drift
         self.arousal *= 0.98
-        self.pressure = min(1.0, max(0.0, self.pressure))
-        self.warmth = min(1.0, max(0.0, self.warmth))
-
-    # --------------------------------------------------
-    # Observer-only view
-    # --------------------------------------------------
+        self.pressure = max(0.0, min(1.0, self.pressure))
+        self.warmth = max(0.0, min(1.0, self.warmth))
 
     def snapshot(self):
         return {
-            "heartbeat_signal": (
-                self.internal_heartbeat.current_signal()
-                if hasattr(self.internal_heartbeat, "current_signal")
-                else None
-            ),
+            "heartbeat_signal": self.internal_heartbeat.current_signal(),
             "arousal": round(self.arousal, 3),
             "pressure": round(self.pressure, 3),
             "warmth": round(self.warmth, 3),
