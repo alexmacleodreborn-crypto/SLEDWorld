@@ -11,7 +11,8 @@ class A7DOState:
     - Has NO access to world time
     - No symbolic knowledge
     - Phase changes occur only through gated events
-    - Wake / sleep are body-driven, not scheduled
+    - Wake is NOT valid pre-birth
+    - Sleep exists both pre- and post-birth (physiological)
     """
 
     def __init__(self):
@@ -54,16 +55,25 @@ class A7DOState:
 
     def wake(self):
         """
-        Transition to awake state.
-        No concept of time — only internal arousal change.
+        Wake transition.
+
+        IMPORTANT:
+        - Wake is INVALID pre-birth
+        - Pre-birth arousal exists, but not 'wake'
         """
+        if not self.aware:
+            # Pre-birth: ignore wake entirely
+            return
+
         self.body.wake()
         self.internal_log.append("wake: arousal increased")
 
     def sleep(self):
         """
-        Transition to sleep state.
-        Triggers internal consolidation.
+        Sleep transition.
+
+        - Valid pre-birth and post-birth
+        - Triggers consolidation
         """
         self.body.sleep()
 
