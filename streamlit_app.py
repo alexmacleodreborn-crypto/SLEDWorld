@@ -56,7 +56,7 @@ cycle = st.session_state.cycle
 # WORLD TICK (NOW REAL)
 # =========================
 
-clock.tick(minutes=900)
+clock.tick(900)
 mother.tick()
 
 if not a7do.aware:
