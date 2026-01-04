@@ -13,6 +13,14 @@ st.set_page_config(
     layout="wide",
 )
 
+# ---------------------------------
+# FORCE CONTINUOUS WORLD TIME
+# ---------------------------------
+if "_world_tick" not in st.session_state:
+    st.session_state["_world_tick"] = 0
+st.session_state["_world_tick"] += 1
+
+
 # =========================
 # Session initialisation
 # =========================
@@ -45,16 +53,12 @@ cycle = st.session_state.cycle
 
 
 # =========================
-# WORLD TICK (always runs)
+# WORLD TICK (NOW REAL)
 # =========================
 
-# Advance world time by 15 minutes per UI refresh
 clock.tick(minutes=15)
-
-# Mother lives in world time
 mother.tick()
 
-# Pre-birth gestation runs automatically
 if not a7do.aware:
     gestation.tick()
 
@@ -114,3 +118,8 @@ st.caption(
     "A7DO has no access to world time. "
     "All causality emerges through gated sensory coupling."
 )
+
+# ---------------------------------
+# AUTO-RERUN
+# ---------------------------------
+st.experimental_rerun()
