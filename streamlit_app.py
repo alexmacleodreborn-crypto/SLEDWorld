@@ -46,7 +46,7 @@ st.json(world.clock.snapshot())
 st.subheader("Places")
 for name, place in world.places.items():
     st.write(f"### {name}")
-    st.json.places
+    st.json(world.places)
 
 st.subheader("Agents")
 st.json(mother.snapshot(clock.world_datetime))
