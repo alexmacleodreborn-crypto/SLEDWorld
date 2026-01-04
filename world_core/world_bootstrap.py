@@ -1,26 +1,28 @@
-from .world_state import WorldState, Place
-from .bot import Bot
+from world_core.world_clock import WorldClock
+from world_core.world_state import WorldState
+from world_core.place import Place
+from world_core.agent_base import Agent
 
-def bootstrap_world() -> WorldState:
-    world = WorldState()
+def build_world():
+    clock = WorldClock(acceleration=120)
 
-    world.places["hospital"] = Place(
-        name="Hospital",
-        kind="hospital",
-        ambient_noise="machines voices",
-        smells=["clean", "antiseptic"],
-        light_level=0.9,
-    )
+    world = WorldState(clock)
 
-    world.places["home"] = Place(
-        name="Home",
-        kind="home",
-        ambient_noise="quiet",
-        smells=["fabric", "food"],
-        light_level=0.6,
-    )
+    # Places
+    home = Place("Home")
+    park = Place("Park")
+    shop = Place("Shop")
 
-    world.bots["Mum"] = Bot("Mum", "mum", "hospital")
-    world.bots["Dad"] = Bot("Dad", "dad", "hospital")
+    for p in (home, park, shop):
+        world.add_place(p)
+
+    # Agents
+    mum = Agent("Mum", "adult")
+    dad = Agent("Dad", "adult")
+    dog = Agent("Dog", "animal")
+
+    world.add_agent(mum, "Home")
+    world.add_agent(dad, "Home")
+    world.add_agent(dog, "Home")
 
     return world
