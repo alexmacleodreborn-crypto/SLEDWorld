@@ -1,16 +1,8 @@
-# world_core/__init__.py
+# sledworld/a7do_core/__init__.py
 
-"""
-World physics layer for SLED World.
+from .a7do_state import A7DOState
+from .day_cycle import DayCycle
 
-Contains:
-- time
-- biological sources (mother)
-- continuous fields (heartbeat, sound, pressure)
-"""
-
-__all__ = [
-    "heartbeat_field",
-    "mother_bot",
-    "world_clock",
-]
+# IMPORTANT:
+# Do NOT import GestationBridge here.
+# It depends on world_core and must be imported explicitly where used.
