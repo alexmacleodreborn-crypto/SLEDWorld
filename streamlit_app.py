@@ -32,7 +32,7 @@ auto = st.sidebar.checkbox("Auto tick", value=True)
 # -----------------------------
 if auto:
     # Each rerun advances time by chosen step
-    world.clock.tick(real_seconds=step_real_seconds)
+    world["clock"].tick(real_seconds=step_real_seconds)
     world.tick()
 
 # -----------------------------
