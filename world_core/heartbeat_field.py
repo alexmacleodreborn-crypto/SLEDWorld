@@ -1,30 +1,25 @@
 import math
-import random
 
 class HeartbeatField:
     """
-    Physical rhythmic oscillator.
-    Represents a biological heartbeat.
-    This is NOT symbolic time.
+    Simple phase-based heartbeat oscillator.
+    Phase advances based on elapsed minutes.
     """
 
-    def __init__(self, bpm_mean: float, bpm_variance: float, seed: int = 1):
-        self.bpm_mean = bpm_mean
-        self.bpm_variance = bpm_variance
-        self.rng = random.Random(seed)
+    def __init__(self, bpm: float = 80.0):
+        self.bpm = bpm
         self.phase = 0.0
 
-    def tick(self, minutes: float) -> float:
+    def tick(self, minutes: float):
         """
-        Advance the heartbeat oscillator.
+        Advance heartbeat phase.
 
-        Returns a normalized intensity 0.0–1.0
+        minutes: elapsed time in minutes (float)
         """
-        bpm = self.bpm_mean + self.rng.uniform(-self.bpm_variance, self.bpm_variance)
-        hz = bpm / 60.0  # beats per second
+        if minutes <= 0:
+            return self.phase
 
-        # advance phase (no notion of clock, only oscillation)
+        hz = self.bpm / 60.0  # beats per second
         self.phase += 2 * math.pi * hz * (minutes / 60.0)
-
-        # normalize
-        return (math.sin(self.phase) + 1.0) / 2.0
+        self.phase %= 2 * math.pi
+        return self.phase
