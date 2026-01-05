@@ -1,17 +1,22 @@
+# world_core/world_object.py
+
 class WorldObject:
     """
-    Base class for any physical object or place in the world.
+    Any physical object in the world grid.
     """
 
-    def __init__(self, name: str, position: tuple[float, float, float]):
+    def __init__(self, name: str, x: float, y: float, z: float = 0.0):
         self.name = name
-        self.position = position  # (x, y, z)
+        self.position = {
+            "x": float(x),
+            "y": float(y),
+            "z": float(z),
+        }
 
-    def tick(self, real_seconds: float):
-        """
-        Optional world update.
-        """
-        pass
+    def move(self, dx=0.0, dy=0.0, dz=0.0):
+        self.position["x"] += dx
+        self.position["y"] += dy
+        self.position["z"] += dz
 
     def snapshot(self):
         return {
