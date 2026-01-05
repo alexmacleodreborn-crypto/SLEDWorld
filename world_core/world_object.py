@@ -2,24 +2,41 @@
 
 class WorldObject:
     """
-    Any physical object in the world grid.
+    Base class for all objective world entities.
+    Pure data. No agents. No cognition.
     """
 
-    def __init__(self, name: str, x: float, y: float, z: float = 0.0):
-        self.name = name
-        self.position = {
-            "x": float(x),
-            "y": float(y),
-            "z": float(z),
-        }
+    def __init__(self, name: str, position: tuple[float, float, float]):
+        if (
+            not isinstance(position, tuple)
+            or len(position) != 3
+        ):
+            raise ValueError(
+                f"WorldObject '{name}' requires position=(x, y, z)"
+            )
 
-    def move(self, dx=0.0, dy=0.0, dz=0.0):
-        self.position["x"] += dx
-        self.position["y"] += dy
-        self.position["z"] += dz
+        x, y, z = position
+
+        # Enforce numeric coordinates
+        try:
+            self.position = (float(x), float(y), float(z))
+        except Exception:
+            raise ValueError(
+                f"Invalid position values for '{name}': {position}"
+            )
+
+        self.name = name
+
+    # -----------------------------------------
+    # Observer snapshot
+    # -----------------------------------------
 
     def snapshot(self):
         return {
             "name": self.name,
-            "position": self.position,
+            "position": {
+                "x": self.position[0],
+                "y": self.position[1],
+                "z": self.position[2],
+            },
         }
