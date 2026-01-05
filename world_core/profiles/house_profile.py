@@ -7,10 +7,13 @@ from world_core.profiles.room_profile import RoomProfile
 class HouseProfile(WorldObject):
     """
     A residential house in the world.
-    Pure world-layer object.
+
+    - Pure world-layer object
+    - Volumetric (XYZ)
+    - Contains rooms as sub-volumes
     """
 
-    FLOOR_HEIGHT = 2500.0  # abstract world meters
+    FLOOR_HEIGHT = 2500.0  # abstract world meters per floor
 
     def __init__(
         self,
@@ -30,15 +33,17 @@ class HouseProfile(WorldObject):
         self.height = self.floors * self.FLOOR_HEIGHT
 
         # -----------------------------------------
-        # World-space bounding box (FIX)
+        # World-space bounding box (AUTHORITATIVE)
         # -----------------------------------------
         x, y, z = self.position
 
-        self.min_xyz = (x, y, z)
-        self.max_xyz = (
-            x + self.footprint[0],
-            y + self.footprint[1],
-            z + self.height,
+        self.set_bounds(
+            min_xyz=(x, y, z),
+            max_xyz=(
+                x + self.footprint[0],
+                y + self.footprint[1],
+                z + self.height,
+            ),
         )
 
         # -----------------------------------------
@@ -48,24 +53,16 @@ class HouseProfile(WorldObject):
         self._build_rooms()
 
     # =================================================
-    # Geometry test (CRITICAL)
-    # =================================================
-
-    def contains_world_point(self, xyz: tuple[float, float, float]) -> bool:
-        x, y, z = xyz
-        return (
-            self.min_xyz[0] <= x <= self.max_xyz[0]
-            and self.min_xyz[1] <= y <= self.max_xyz[1]
-            and self.min_xyz[2] <= z <= self.max_xyz[2]
-        )
-
-    # =================================================
     # Room construction
     # =================================================
 
     def _build_rooms(self):
         """
         Build 6 rooms across floors with real XYZ volumes.
+        Layout:
+        - 3 rooms wide
+        - 2 rooms deep
+        - split across floors
         """
 
         room_defs = [
@@ -116,10 +113,6 @@ class HouseProfile(WorldObject):
             "residents": self.residents,
             "floors": self.floors,
             "height": self.height,
-            "bounds": {
-                "min": self.min_xyz,
-                "max": self.max_xyz,
-            },
             "rooms": {
                 idx: room.snapshot()
                 for idx, room in self.rooms.items()
