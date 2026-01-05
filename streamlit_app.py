@@ -1,54 +1,59 @@
 import streamlit as st
+
 from world_core.bootstrap import build_world
+from world_core.world_clock import WorldClock
 
-st.set_page_config(page_title="SLED World – World Core", layout="wide")
+st.set_page_config(page_title="SLED World – World Frame", layout="wide")
 
-# -----------------------------
+# =========================
 # Session init
-# -----------------------------
+# =========================
 if "world" not in st.session_state:
     st.session_state.world = build_world()
 
+if "clock" not in st.session_state:
+    # acceleration: how many WORLD seconds pass per REAL second (used when ticking by real_seconds)
+    st.session_state.clock = WorldClock(acceleration=60)
+
 world = st.session_state.world
+clock = st.session_state.clock
 
-# -----------------------------
-# Controls
-# -----------------------------
-st.sidebar.header("World Controls")
+# =========================
+# Controls (button clock)
+# =========================
+st.sidebar.header("World Clock Controls")
 
-accel = st.sidebar.slider("Acceleration (world sec per real sec)", 1, 3600, 120, 1)
-world.clock.acceleration = accel
+accel = st.sidebar.slider("Acceleration (world seconds per real second)", 1, 3600, int(clock.acceleration))
+clock.acceleration = accel  # ✅ FIX: clock is separate, not world.clock
 
-step_real_seconds = st.sidebar.selectbox("Tick step (real seconds)", [0.25, 0.5, 1.0, 2.0], index=2)
+step_minutes = st.sidebar.selectbox("Step size", [1, 5, 15, 30, 60, 180, 720, 1440], index=2)
 
-if st.sidebar.button("Tick once"):
-    world.clock.tick(real_seconds=step_real_seconds)
-    world.clock.tick(real_seconds=step_real_seconds)
+colA, colB = st.sidebar.columns(2)
+with colA:
+    if st.button("Tick +1 step"):
+        clock.tick(minutes=step_minutes)
 
-auto = st.sidebar.checkbox("Auto tick", value=True)
+with colB:
+    if st.button("Tick +10 steps"):
+        clock.tick(minutes=step_minutes * 10)
 
-# -----------------------------
-# Auto loop (safe/simple)
-# -----------------------------
-if auto:
-    # Each rerun advances time by chosen step
-    world.clock.tick(real_seconds=step_real_seconds)
-    world.clock.tick(real_seconds=step_real_seconds)
+st.sidebar.divider()
 
-# -----------------------------
+real_seconds = st.sidebar.slider("Auto step (real seconds)", 0.0, 5.0, 0.0, 0.1)
+if real_seconds > 0:
+    # This advances world time continuously based on real time pacing
+    clock.tick(real_seconds=real_seconds)
+
+# =========================
 # Display
-# -----------------------------
-st.title("SLED World – World Core (No A7DO)")
+# =========================
+st.title("SLED World – World Frame")
 
 st.subheader("World Time")
-st.json(world.clock.snapshot())
+st.json(clock.snapshot())
 
-st.subheader("Places")
+st.subheader("World Places")
+# WorldState holds places in world.places
 for name, place in world.places.items():
-    st.write(f"### {name}")
-    st.json(world.places)
-
-st.subheader("Agents")
-st.json(st.session_state.mother.snapshot(st.session_state.clock.world_datetime))
-
-st.caption("World Core only: time + places + agents. No A7DO, no gestation, no gating yet.")
+    with st.expander(name, expanded=False):
+        st.json(place.snapshot())
