@@ -5,11 +5,13 @@ class WalkerBot:
     """
     Physical world walker.
     Moves through XYZ space using world time.
-    Semantic location (rooms / areas) is observer-only.
+
+    Semantic location (rooms / areas) is DERIVED from world geometry.
     """
 
-    def __init__(self, name: str, start_xyz):
+    def __init__(self, name: str, start_xyz, world):
         self.name = name
+        self.world = world  # READ-ONLY world reference
 
         # -----------------------------------------
         # Physical state
@@ -31,12 +33,15 @@ class WalkerBot:
         # -----------------------------------------
         # Observer-only semantics
         # -----------------------------------------
-        self.current_area = None  # room / park feature (label only)
+        self.current_area = None  # resolved automatically
 
         # -----------------------------------------
         # Time anchor
         # -----------------------------------------
         self._last_time = None
+
+        # Resolve initial area
+        self._resolve_current_area()
 
     # =================================================
     # NAVIGATION
@@ -54,9 +59,6 @@ class WalkerBot:
     # =================================================
 
     def tick(self, clock):
-        if self.target is None:
-            return
-
         now = clock.world_datetime
 
         if self._last_time is None:
@@ -70,7 +72,12 @@ class WalkerBot:
             return
 
         minutes = delta_seconds / 60.0
-        self._move(minutes)
+
+        if self.target is not None:
+            self._move(minutes)
+
+        # ALWAYS re-resolve semantic location
+        self._resolve_current_area()
 
     def _move(self, minutes):
         dx = self.target[0] - self.position[0]
@@ -89,6 +96,33 @@ class WalkerBot:
         self.position[0] += dx * scale
         self.position[1] += dy * scale
         self.position[2] += dz * scale
+
+    # =================================================
+    # SEMANTIC RESOLUTION (KEY FIX)
+    # =================================================
+
+    def _resolve_current_area(self):
+        """
+        Determine which room / place the walker is inside
+        based purely on world geometry.
+        """
+        xyz = tuple(self.position)
+
+        # Check rooms first (more specific)
+        for place in self.world.places.values():
+            if hasattr(place, "rooms"):
+                for room in place.rooms.values():
+                    if room.contains_world_point(xyz):
+                        self.current_area = room.name
+                        return
+
+        # Fallback to places
+        for place in self.world.places.values():
+            if place.contains_world_point(xyz):
+                self.current_area = place.name
+                return
+
+        self.current_area = None
 
     # =================================================
     # OBSERVER VIEW
