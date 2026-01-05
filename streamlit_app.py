@@ -1,59 +1,129 @@
 import streamlit as st
+import matplotlib.pyplot as plt
 
 from world_core.bootstrap import build_world
-from world_core.world_clock import WorldClock
 
-st.set_page_config(page_title="SLED World – World Frame", layout="wide")
 
-# =========================
-# Session init
-# =========================
+# ======================================================
+# Streamlit config
+# ======================================================
+
+st.set_page_config(
+    page_title="SLED World – World Frame",
+    layout="wide",
+)
+
+
+# ======================================================
+# Session initialisation
+# ======================================================
+
 if "world" not in st.session_state:
     st.session_state.world = build_world()
 
-if "clock" not in st.session_state:
-    # acceleration: how many WORLD seconds pass per REAL second (used when ticking by real_seconds)
-    st.session_state.clock = WorldClock(acceleration=60)
-
 world = st.session_state.world
-clock = st.session_state.clock
 
-# =========================
-# Controls (button clock)
-# =========================
-st.sidebar.header("World Clock Controls")
 
-accel = st.sidebar.slider("Acceleration (world seconds per real second)", 1, 3600, int(clock.acceleration))
-clock.acceleration = accel  # ✅ FIX: clock is separate, not world.clock
+# ======================================================
+# World clock control (OBSERVER)
+# ======================================================
 
-step_minutes = st.sidebar.selectbox("Step size", [1, 5, 15, 30, 60, 180, 720, 1440], index=2)
+st.sidebar.header("World Clock")
 
-colA, colB = st.sidebar.columns(2)
-with colA:
-    if st.button("Tick +1 step"):
-        clock.tick(minutes=step_minutes)
+accel = st.sidebar.slider(
+    "Time acceleration (world seconds per real second)",
+    min_value=1,
+    max_value=3600,
+    value=world.clock.acceleration,
+    step=1,
+)
 
-with colB:
-    if st.button("Tick +10 steps"):
-        clock.tick(minutes=step_minutes * 10)
+world.clock.acceleration = accel
 
-st.sidebar.divider()
+step_real_seconds = st.sidebar.slider(
+    "Step (real seconds)",
+    min_value=0.1,
+    max_value=5.0,
+    value=1.0,
+    step=0.1,
+)
 
-real_seconds = st.sidebar.slider("Auto step (real seconds)", 0.0, 5.0, 0.0, 0.1)
-if real_seconds > 0:
-    # This advances world time continuously based on real time pacing
-    clock.tick(real_seconds=real_seconds)
 
-# =========================
-# Display
-# =========================
+# ======================================================
+# World tick (SAFE, deterministic)
+# ======================================================
+
+world.clock.tick(real_seconds=step_real_seconds)
+world.tick()
+
+
+# ======================================================
+# WORLD MAP RENDERER (OBSERVER ONLY)
+# ======================================================
+
+def render_world_map(world):
+    fig, ax = plt.subplots(figsize=(8, 8))
+
+    for name, place in world.places.items():
+        b = place.bounds
+
+        x0, x1 = b["x"]
+        y0, y1 = b["y"]
+
+        width = x1 - x0
+        height = y1 - y0
+
+        ax.add_patch(
+            plt.Rectangle(
+                (x0, y0),
+                width,
+                height,
+                fill=False,
+                linewidth=2,
+            )
+        )
+
+        ax.text(
+            x0 + width / 2,
+            y0 + height / 2,
+            name,
+            ha="center",
+            va="center",
+            fontsize=9,
+        )
+
+    ax.set_title("World Map (Top-Down XY Projection)")
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_aspect("equal", adjustable="box")
+    ax.grid(True)
+
+    return fig
+
+
+# ======================================================
+# DISPLAY
+# ======================================================
+
 st.title("SLED World – World Frame")
 
 st.subheader("World Time")
-st.json(clock.snapshot())
+st.json(world.clock.snapshot())
 
-st.subheader("World Places")
-# WorldState holds places in world.places
+
+st.subheader("World Places (Raw)")
 for name, place in world.places.items():
-    with st.expander(name, expanded=False):
-        st.json(place.snapshot())
+    st.markdown(f"### {name}")
+    st.json(place.snapshot())
+
+
+st.subheader("World Map")
+fig = render_world_map(world)
+st.pyplot(fig)
+
+
+st.caption(
+    "Observer view only. "
+    "No Sandy’s Law gating applied. "
+    "A7DO perception will be layered on top later."
+)
