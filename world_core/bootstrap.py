@@ -15,7 +15,9 @@ class WorldState:
         self.grid = WorldGrid()
         self.places = {}
         self.agents = []  # important: even if empty
-
+    def add_agent(self, agent):
+    self.agents.append(agent)
+    
     # -----------------------------------------
     # Registration
     # -----------------------------------------
@@ -68,5 +70,13 @@ def build_world():
         footprint=(50, 50),
     )
     world.add_place(house)
+    walker = WalkerBot(
+    name="Walker-1",
+    position=house.position,
+)
 
+# Walk to the park
+walker.set_target(park.position)
+
+world.add_agent(walker)
     return world
