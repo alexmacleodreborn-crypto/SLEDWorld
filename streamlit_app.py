@@ -25,6 +25,17 @@ world = st.session_state.world
 
 
 # ======================================================
+# CLOCK ACCESS (robust)
+# ======================================================
+
+# Support both object-style and dict-style worlds
+if hasattr(world, "clock"):
+    clock = world.clock
+else:
+    clock = world["clock"]
+
+
+# ======================================================
 # World clock control (OBSERVER)
 # ======================================================
 
@@ -34,11 +45,11 @@ accel = st.sidebar.slider(
     "Time acceleration (world seconds per real second)",
     min_value=1,
     max_value=3600,
-    value=world.clock.acceleration,
+    value=getattr(clock, "acceleration", 60),
     step=1,
 )
 
-world.clock.acceleration = accel
+clock.acceleration = accel
 
 step_real_seconds = st.sidebar.slider(
     "Step (real seconds)",
@@ -50,21 +61,27 @@ step_real_seconds = st.sidebar.slider(
 
 
 # ======================================================
-# World tick (SAFE, deterministic)
+# World tick (SAFE)
 # ======================================================
 
-world.clock.tick(real_seconds=step_real_seconds)
-world.tick()
+# Advance world time
+clock.tick(real_seconds=step_real_seconds)
+
+# Advance world systems (if method exists)
+if hasattr(world, "tick"):
+    world.tick()
 
 
 # ======================================================
-# WORLD MAP RENDERER (OBSERVER ONLY)
+# WORLD MAP RENDERER
 # ======================================================
 
 def render_world_map(world):
     fig, ax = plt.subplots(figsize=(8, 8))
 
-    for name, place in world.places.items():
+    places = world.places if hasattr(world, "places") else world["places"]
+
+    for name, place in places.items():
         b = place.bounds
 
         x0, x1 = b["x"]
@@ -108,11 +125,13 @@ def render_world_map(world):
 st.title("SLED World – World Frame")
 
 st.subheader("World Time")
-st.json(world.clock.snapshot())
+st.json(clock.snapshot())
 
 
-st.subheader("World Places (Raw)")
-for name, place in world.places.items():
+st.subheader("World Places")
+places = world.places if hasattr(world, "places") else world["places"]
+
+for name, place in places.items():
     st.markdown(f"### {name}")
     st.json(place.snapshot())
 
@@ -123,7 +142,6 @@ st.pyplot(fig)
 
 
 st.caption(
-    "Observer view only. "
-    "No Sandy’s Law gating applied. "
-    "A7DO perception will be layered on top later."
+    "Observer-only world frame. "
+    "No agents. No perception. No Sandy’s Law gating yet."
 )
