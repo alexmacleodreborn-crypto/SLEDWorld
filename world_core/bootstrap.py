@@ -3,7 +3,7 @@
 from world_core.world_grid import WorldGrid
 from world_core.profiles.park_profile import ParkProfile
 from world_core.profiles.house_profile import HouseProfile
-from world_core.agents.walker_bot import WalkerBot
+from world_core.walker_bot import WalkerBot
 
 
 class WorldState:
@@ -12,7 +12,8 @@ class WorldState:
     Holds spatial grid, places, and agents.
     """
 
-    def __init__(self):
+    def __init__(self, clock):
+        self.clock = clock
         self.grid = WorldGrid()
         self.places = {}
         self.agents = []
@@ -34,23 +35,21 @@ class WorldState:
 
     def tick(self):
         """
-        Advances all world agents.
-        Safe even if no agents exist.
+        Advances all world agents using world time.
         """
         for agent in self.agents:
-            agent.tick()
+            agent.tick(self.clock)
 
 
-def build_world():
+def build_world(clock):
     """
-    Constructs the base world with spatially located places
-    and one moving agent.
+    Constructs the base world with places and one walker.
     """
 
-    world = WorldState()
+    world = WorldState(clock)
 
     # -------------------------
-    # Park
+    # Places
     # -------------------------
     park = ParkProfile(
         name="Central Park",
@@ -59,9 +58,6 @@ def build_world():
     )
     world.add_place(park)
 
-    # -------------------------
-    # House
-    # -------------------------
     house = HouseProfile(
         name="Family House",
         position=(4800.0, 5100.0, 0.0),
@@ -71,16 +67,12 @@ def build_world():
     world.add_place(house)
 
     # -------------------------
-    # Walker Agent
+    # Walker Bot (place-based)
     # -------------------------
     walker = WalkerBot(
         name="Walker-1",
-        position=house.position,
+        places=world.places,
     )
-
-    # Walk from house to park
-    walker.set_target(park.position)
-
     world.add_agent(walker)
 
     return world
