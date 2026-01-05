@@ -17,10 +17,8 @@ class HouseProfile(WorldObject):
         residents: int = 3,
         floors: int = 2,
     ):
-        # Unpack world position
-        x, y, z = position
-
-        super().__init__(name, x, y, z)
+        # Pass position tuple directly to WorldObject
+        super().__init__(name=name, position=position)
 
         # Physical properties
         self.footprint = footprint
@@ -34,7 +32,10 @@ class HouseProfile(WorldObject):
         base = super().snapshot()
         base.update({
             "type": "house",
-            "footprint": self.footprint,
+            "footprint": {
+                "width": self.footprint[0],
+                "depth": self.footprint[1],
+            },
             "area": self.area,
             "residents": self.residents,
             "floors": self.floors,
