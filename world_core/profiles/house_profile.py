@@ -1,50 +1,59 @@
 from world_core.world_object import WorldObject
+import random
 
 
 class HouseProfile(WorldObject):
     """
-    A residential house in the world.
-    Pure world-layer object.
-
-    Structure is spatial (XYZ), not symbolic.
+    A residential house with internal spatial rooms.
     """
 
     def __init__(
         self,
         name: str,
         position: tuple[float, float, float],
-        footprint: tuple[float, float],   # (width, depth) in meters
+        footprint: tuple[float, float],   # (width, depth)
         floors: int = 2,
         residents: int = 3,
     ):
-        # ✅ STANDARD: pass position as a single tuple
-        super().__init__(name=name, position=position)
+        x, y, z = position
+        super().__init__(name, x, y, z)
 
-        # -----------------------------------------
-        # Physical properties
-        # -----------------------------------------
         self.footprint = footprint
         self.floors = floors
         self.residents = residents
-
         self.area = footprint[0] * footprint[1]
 
-        # -----------------------------------------
-        # Internal spatial layout (world-only)
-        # Rooms are identified numerically, not linguistically
-        # -----------------------------------------
+        # ---------------------------------
+        # Room layout (LOCAL offsets)
+        # ---------------------------------
+        w, d = footprint
+
         self.rooms = {
-            0: {"type": "living",   "z": 0},
-            1: {"type": "kitchen",  "z": 0},
-            2: {"type": "bathroom", "z": 0},
-            3: {"type": "bedroom",  "z": 1},
-            4: {"type": "bedroom",  "z": 1},
-            5: {"type": "toilet",   "z": 1},
+            0: {"type": "living",   "box": (0,     0,     0, w/2, d/2, 3)},
+            1: {"type": "kitchen",  "box": (w/2,   0,     0, w,   d/2, 3)},
+            2: {"type": "bathroom", "box": (0,     d/2,   0, w/2, d,   3)},
+            3: {"type": "bedroom",  "box": (0,     0,     3, w/2, d/2, 6)},
+            4: {"type": "bedroom",  "box": (w/2,   0,     3, w,   d/2, 6)},
+            5: {"type": "toilet",   "box": (0,     d/2,   3, w/2, d,   6)},
         }
 
-    # -----------------------------------------
-    # OBSERVER VIEW
-    # -----------------------------------------
+    # ---------------------------------
+    # Spatial helpers
+    # ---------------------------------
+
+    def random_point_in_room(self, room_id: int):
+        room = self.rooms[room_id]["box"]
+        x1, y1, z1, x2, y2, z2 = room
+
+        return (
+            self.position[0] + random.uniform(x1, x2),
+            self.position[1] + random.uniform(y1, y2),
+            random.uniform(z1, z2),
+        )
+
+    # ---------------------------------
+    # Snapshot
+    # ---------------------------------
 
     def snapshot(self):
         base = super().snapshot()
@@ -54,6 +63,9 @@ class HouseProfile(WorldObject):
             "area": self.area,
             "floors": self.floors,
             "residents": self.residents,
-            "rooms": self.rooms,
+            "rooms": {
+                k: {"type": v["type"], "box": v["box"]}
+                for k, v in self.rooms.items()
+            },
         })
         return base
