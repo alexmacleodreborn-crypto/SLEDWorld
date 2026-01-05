@@ -6,7 +6,7 @@ from world_core.world_object import WorldObject
 class ParkProfile(WorldObject):
     """
     A public park in the world.
-    Exists purely at the world layer.
+    Pure world-layer object.
     """
 
     def __init__(
@@ -16,7 +16,9 @@ class ParkProfile(WorldObject):
         trees: int = 20,
         area: float = 200 * 200,  # m²
     ):
-        super().__init__(name=name, position=position)
+        x, y, z = position  # 🔧 unpack for WorldObject
+
+        super().__init__(name, x, y, z)
 
         self.trees = trees
         self.area = area
