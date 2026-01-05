@@ -1,45 +1,23 @@
-from world_core.world_object import WorldObject
-import random
+# world_core/profiles/park_profile.py
 
+from world_core.world_object import WorldObject
 
 class ParkProfile(WorldObject):
     """
-    A park in the world.
-    Exists independently of any observer.
+    Physical park in world space.
     """
 
-    def __init__(
-        self,
-        name: str,
-        position: tuple[float, float, float],
-        tree_count: int = 20,
-        area_size: tuple[int, int] = (200, 200),
-        seed: int = 1,
-    ):
-        super().__init__(name=name, position=position)
+    def __init__(self, name="Central Park", x=5000, y=5000, z=0):
+        super().__init__(name, x, y, z)
 
-        self.tree_count = tree_count
-        self.area_size = area_size
-        self.rng = random.Random(seed)
-
-        # Pre-generate trees (world truth)
-        self.trees = [
-            {
-                "id": i,
-                "offset": (
-                    self.rng.uniform(-area_size[0] / 2, area_size[0] / 2),
-                    self.rng.uniform(-area_size[1] / 2, area_size[1] / 2),
-                    0,
-                ),
-            }
-            for i in range(tree_count)
-        ]
+        self.trees = 20
+        self.area = 200 * 200  # m²
 
     def snapshot(self):
-        return {
+        base = super().snapshot()
+        base.update({
             "type": "park",
-            "name": self.name,
-            "position": self.position,
-            "tree_count": self.tree_count,
-            "area_size": self.area_size,
-        }
+            "trees": self.trees,
+            "area": self.area,
+        })
+        return base
