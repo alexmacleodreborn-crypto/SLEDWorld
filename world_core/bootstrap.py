@@ -15,8 +15,8 @@ class WorldState:
     def __init__(self, clock):
         self.clock = clock
         self.grid = WorldGrid()
-        self.places = {}
-        self.agents = []
+        self.places: dict[str, object] = {}
+        self.agents: list = []
 
     # -----------------------------------------
     # Registration
@@ -36,6 +36,7 @@ class WorldState:
     def tick(self):
         """
         Advances all world agents using world time.
+        Safe even if no agents exist.
         """
         for agent in self.agents:
             agent.tick(self.clock)
@@ -43,13 +44,14 @@ class WorldState:
 
 def build_world(clock):
     """
-    Constructs the base world with places and one walker.
+    Constructs the base world with places and a simple walker agent.
+    No A7DO. No cognition. Pure world layer.
     """
 
     world = WorldState(clock)
 
     # -------------------------
-    # Places
+    # Park
     # -------------------------
     park = ParkProfile(
         name="Central Park",
@@ -58,11 +60,14 @@ def build_world(clock):
     )
     world.add_place(park)
 
+    # -------------------------
+    # House
+    # -------------------------
     house = HouseProfile(
         name="Family House",
         position=(4800.0, 5100.0, 0.0),
-        floors=2,
         footprint=(50, 50),
+        floors=2,
     )
     world.add_place(house)
 
