@@ -1,100 +1,64 @@
 import math
+import random
 
 
 class WalkerBot:
     """
     Physical world walker.
-    Moves through XYZ space using world time.
-    Semantic location (rooms / areas) is assigned on arrival,
-    never used for movement.
+    Moves continuously in XYZ and occupies real rooms.
     """
 
     def __init__(self, name: str, house):
         self.name = name
+        self.house = house
 
-        # -----------------------------------------
-        # Physical state
-        # -----------------------------------------
-        self.position = [
-            float(house.position[0]),
-            float(house.position[1]),
-            float(house.position[2]),
-        ]  # XYZ (meters)
+        # Start in random bedroom
+        self.current_room = random.choice([3, 4])
+        self.position = list(house.random_point_in_room(self.current_room))
 
-        self.speed = 1.2  # meters per minute (walking)
+        self.target = None
+        self.speed = 1.2  # meters per minute
+        self._last_time = None
 
-        # -----------------------------------------
-        # Navigation state
-        # -----------------------------------------
-        self.target = None          # XYZ target
-        self.arrival_threshold = 0.5  # meters
+        # Pick initial target
+        self.pick_new_target()
 
-        # -----------------------------------------
-        # Semantic state (observer-only)
-        # -----------------------------------------
-        self.current_room = 0  # semantic label ONLY
+    # ---------------------------------
+    # Behaviour
+    # ---------------------------------
 
-        # -----------------------------------------
-        # Time anchor
-        # -----------------------------------------
-        self._last_time = None  # datetime of last tick
+    def pick_new_target(self):
+        self.current_room = random.choice(list(self.house.rooms.keys()))
+        self.target = list(self.house.random_point_in_room(self.current_room))
 
-    # =================================================
-    # NAVIGATION
-    # =================================================
-
-    def set_target(self, xyz):
-        """
-        Set a new physical destination.
-        xyz must be a 3-element iterable.
-        """
-        self.target = [
-            float(xyz[0]),
-            float(xyz[1]),
-            float(xyz[2]),
-        ]
-
-    # =================================================
+    # ---------------------------------
     # WORLD TICK
-    # =================================================
+    # ---------------------------------
 
     def tick(self, clock):
-        """
-        Advances the bot using world time.
-        """
-        if self.target is None:
-            return
-
         now = clock.world_datetime
 
-        # Initialise time anchor
         if self._last_time is None:
             self._last_time = now
             return
 
-        delta_seconds = (now - self._last_time).total_seconds()
+        delta_minutes = (now - self._last_time).total_seconds() / 60.0
         self._last_time = now
 
-        if delta_seconds <= 0:
+        if delta_minutes <= 0:
             return
 
-        minutes = delta_seconds / 60.0
-        self._move_towards_target(minutes)
+        self._move(delta_minutes)
 
-    def _move_towards_target(self, minutes):
+    def _move(self, minutes):
         dx = self.target[0] - self.position[0]
         dy = self.target[1] - self.position[1]
+        dz = self.target[2] - self.position[2]
 
-        # Z is NOT interpolated for walking
-        dz = 0.0
+        distance = math.sqrt(dx*dx + dy*dy + dz*dz)
 
-        distance = math.sqrt(dx * dx + dy * dy)
-
-        # -----------------------------------------
-        # Arrival check
-        # -----------------------------------------
-        if distance <= self.arrival_threshold:
-            self._on_arrival()
+        if distance < 0.5:
+            self.pick_new_target()
             return
 
         step = self.speed * minutes
@@ -102,29 +66,17 @@ class WalkerBot:
 
         self.position[0] += dx * scale
         self.position[1] += dy * scale
-        # Z unchanged (ground walking)
+        self.position[2] += dz * scale
 
-    def _on_arrival(self):
-        """
-        Called once the target is reached.
-        Semantic updates belong here.
-        """
-        self.target = None
-        # current_room / area can be updated later
-
-    # =================================================
+    # ---------------------------------
     # OBSERVER VIEW
-    # =================================================
+    # ---------------------------------
 
     def snapshot(self):
         return {
             "agent": self.name,
-            "position_xyz": [
-                round(self.position[0], 2),
-                round(self.position[1], 2),
-                round(self.position[2], 2),
-            ],
-            "target_xyz": self.target,
+            "position_xyz": [round(v, 2) for v in self.position],
             "current_room": self.current_room,
+            "target_xyz": [round(v, 2) for v in self.target],
             "speed_m_per_min": self.speed,
         }
