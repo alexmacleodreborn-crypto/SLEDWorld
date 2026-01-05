@@ -1,36 +1,22 @@
-"""
-World bootstrap.
+# world_core/bootstrap.py
 
-Creates the physical world container:
-- clock
-- places
-- environment
-
-NO agents are created here.
-NO MotherBot import.
-"""
-
-from world_core.world_clock import WorldClock
-
-
-class World:
-    def __init__(self):
-        self.clock = WorldClock(acceleration=60)
-
-        # Physical places (empty shells for now)
-        self.places = {
-            "home": {},
-            "park": {},
-            "street": {},
-        }
-
-    def tick(self, real_seconds=1.0):
-        self.clock.tick(real_seconds=real_seconds)
-
+from world_core.world_space import WorldSpace
+from world_core.place import Place
+from world_core.profiles.park_profile import ParkProfile
 
 def build_world():
-    """
-    Returns a pure world object.
-    Agents are attached elsewhere.
-    """
-    return World()
+    world = WorldSpace()
+
+    park = Place(
+        name="Central Park",
+        origin=(1000, 1000, 0),
+        size=(200, 200, 0),
+        profile=ParkProfile(tree_count=20),
+    )
+
+    park.populate()
+
+    for obj in park.objects:
+        world.add_object(obj)
+
+    return world
