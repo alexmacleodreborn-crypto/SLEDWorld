@@ -72,14 +72,14 @@ def build_world(clock):
     world.add_place(house)
 
     # -------------------------
-    # Walker Bot (PHYSICAL anchor)
+    # Walker Bot (PHYSICAL anchor ONLY)
     # -------------------------
     walker = WalkerBot(
         name="Walker-1",
-        start_xyz=house.position,   # ✅ matches WalkerBot signature
+        start_xyz=house.position,   # ✅ matches WalkerBot signature exactly
     )
 
-    # Give the walker a physical destination
+    # Physical destination (XYZ only)
     walker.set_target(park.position)
 
     world.add_agent(walker)
