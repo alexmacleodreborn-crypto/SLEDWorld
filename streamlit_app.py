@@ -82,6 +82,11 @@ st.caption(
     f"World clock running at {clock.acceleration}× real time · "
     f"Step size: {step_minutes} minutes"
 )
+# --------------------------
+# World grid
+# --------------------------
+st.subheader("World Grid")
+st.json(world.grid.snapshot())
 
 # --------------------------
 # World Summary (NEW – SAFE)
