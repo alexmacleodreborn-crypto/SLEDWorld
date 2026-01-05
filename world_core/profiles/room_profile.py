@@ -6,7 +6,10 @@ from world_core.world_object import WorldObject
 class RoomProfile(WorldObject):
     """
     A room inside a house.
-    Pure world-layer object with volume.
+
+    - Pure world-layer object
+    - Real 3D volume in WORLD coordinates
+    - No agents, no cognition, no time
     """
 
     def __init__(
@@ -23,18 +26,11 @@ class RoomProfile(WorldObject):
         x, y, z = position
 
         # -----------------------------------------
-        # World-space bounding box (explicit)
+        # World-space bounding box (AUTHORITATIVE)
         # -----------------------------------------
-        self.min_xyz = (
-            float(x),
-            float(y),
-            float(z),
-        )
-
-        self.max_xyz = (
-            float(x + width),
-            float(y + depth),
-            float(z + height),
+        self.set_bounds(
+            min_xyz=(x, y, z),
+            max_xyz=(x + width, y + depth, z + height),
         )
 
         # -----------------------------------------
@@ -47,19 +43,7 @@ class RoomProfile(WorldObject):
         }
 
         self.floor = int(floor)
-        self.room_type = room_type
-
-    # -----------------------------------------
-    # Geometry test (CRITICAL)
-    # -----------------------------------------
-
-    def contains_world_point(self, xyz: tuple[float, float, float]) -> bool:
-        x, y, z = xyz
-        return (
-            self.min_xyz[0] <= x <= self.max_xyz[0]
-            and self.min_xyz[1] <= y <= self.max_xyz[1]
-            and self.min_xyz[2] <= z <= self.max_xyz[2]
-        )
+        self.room_type = str(room_type)
 
     # -----------------------------------------
     # Observer snapshot
@@ -72,9 +56,5 @@ class RoomProfile(WorldObject):
             "room_type": self.room_type,
             "floor": self.floor,
             "size": self.size,
-            "bounds": {
-                "min": self.min_xyz,
-                "max": self.max_xyz,
-            },
         })
         return base
