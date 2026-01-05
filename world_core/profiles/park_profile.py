@@ -16,9 +16,8 @@ class ParkProfile(WorldObject):
         trees: int = 20,
         area: float = 200 * 200,  # m²
     ):
-        x, y, z = position  # 🔧 unpack for WorldObject
-
-        super().__init__(name, x, y, z)
+        # Pass position tuple directly to WorldObject
+        super().__init__(name=name, position=position)
 
         self.trees = trees
         self.area = area
