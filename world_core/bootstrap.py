@@ -5,19 +5,18 @@ from world_core.profiles.park_profile import ParkProfile
 from world_core.profiles.house_profile import HouseProfile
 from world_core.agents.walker_bot import WalkerBot
 
+
 class WorldState:
     """
     Container for the entire simulated world.
-    Holds spatial grid, places, and future agents.
+    Holds spatial grid, places, and agents.
     """
 
     def __init__(self):
         self.grid = WorldGrid()
         self.places = {}
-        self.agents = []  # important: even if empty
-    def add_agent(self, agent):
-    self.agents.append(agent)
-    
+        self.agents = []
+
     # -----------------------------------------
     # Registration
     # -----------------------------------------
@@ -30,22 +29,22 @@ class WorldState:
         self.agents.append(agent)
 
     # -----------------------------------------
-    # World tick (safe no-op for now)
+    # World tick
     # -----------------------------------------
 
-    def tick(self, clock=None):
+    def tick(self):
         """
-        Advances all world agents (if any).
-        Safe to call even when no agents exist.
+        Advances all world agents.
+        Safe even if no agents exist.
         """
         for agent in self.agents:
-            agent.tick(clock)
+            agent.tick()
 
 
 def build_world():
     """
-    Constructs the base world with spatially located places.
-    No agents. No A7DO. Pure world state.
+    Constructs the base world with spatially located places
+    and one moving agent.
     """
 
     world = WorldState()
@@ -70,13 +69,18 @@ def build_world():
         footprint=(50, 50),
     )
     world.add_place(house)
+
+    # -------------------------
+    # Walker Agent
+    # -------------------------
     walker = WalkerBot(
-    name="Walker-1",
-    position=house.position,
-)
+        name="Walker-1",
+        position=house.position,
+    )
 
-# Walk to the park
-walker.set_target(park.position)
+    # Walk from house to park
+    walker.set_target(park.position)
 
-world.add_agent(walker)
+    world.add_agent(walker)
+
     return world
