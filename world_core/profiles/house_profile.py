@@ -10,7 +10,7 @@ class HouseProfile(WorldObject):
     Pure world-layer object.
     """
 
-    FLOOR_HEIGHT = 2500.0  # meters (abstract world scale)
+    FLOOR_HEIGHT = 2500.0  # abstract world meters
 
     def __init__(
         self,
@@ -29,15 +29,16 @@ class HouseProfile(WorldObject):
         self.area = self.footprint[0] * self.footprint[1]
         self.height = self.floors * self.FLOOR_HEIGHT
 
-        # Define house bounds in WORLD space
+        # -----------------------------------------
+        # World-space bounding box (FIX)
+        # -----------------------------------------
         x, y, z = self.position
-        self.set_bounds(
-            min_xyz=(x, y, z),
-            max_xyz=(
-                x + self.footprint[0],
-                y + self.footprint[1],
-                z + self.height,
-            ),
+
+        self.min_xyz = (x, y, z)
+        self.max_xyz = (
+            x + self.footprint[0],
+            y + self.footprint[1],
+            z + self.height,
         )
 
         # -----------------------------------------
@@ -45,6 +46,18 @@ class HouseProfile(WorldObject):
         # -----------------------------------------
         self.rooms: dict[int, RoomProfile] = {}
         self._build_rooms()
+
+    # =================================================
+    # Geometry test (CRITICAL)
+    # =================================================
+
+    def contains_world_point(self, xyz: tuple[float, float, float]) -> bool:
+        x, y, z = xyz
+        return (
+            self.min_xyz[0] <= x <= self.max_xyz[0]
+            and self.min_xyz[1] <= y <= self.max_xyz[1]
+            and self.min_xyz[2] <= z <= self.max_xyz[2]
+        )
 
     # =================================================
     # Room construction
@@ -103,6 +116,10 @@ class HouseProfile(WorldObject):
             "residents": self.residents,
             "floors": self.floors,
             "height": self.height,
+            "bounds": {
+                "min": self.min_xyz,
+                "max": self.max_xyz,
+            },
             "rooms": {
                 idx: room.snapshot()
                 for idx, room in self.rooms.items()
