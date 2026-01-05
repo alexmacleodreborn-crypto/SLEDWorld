@@ -1,17 +1,21 @@
+# world_core/walker_bot.py
+
 import math
 
 
 class WalkerBot:
     """
     Physical world walker.
-    Moves through XYZ space using world time.
 
-    Semantic location (rooms / areas) is DERIVED from world geometry.
+    - Moves continuously in XYZ space using world time
+    - Has NO symbolic knowledge
+    - Semantic location (room / park / area) is DERIVED
+      purely from world geometry
     """
 
     def __init__(self, name: str, start_xyz, world):
         self.name = name
-        self.world = world  # READ-ONLY world reference
+        self.world = world  # READ-ONLY reference to world state
 
         # -----------------------------------------
         # Physical state
@@ -22,7 +26,7 @@ class WalkerBot:
             float(start_xyz[2]),
         ]  # XYZ meters
 
-        self.speed = 1.2  # meters per minute
+        self.speed = 1.2  # meters per minute (walking speed)
 
         # -----------------------------------------
         # Navigation state
@@ -31,9 +35,9 @@ class WalkerBot:
         self.arrival_threshold = 0.5  # meters
 
         # -----------------------------------------
-        # Observer-only semantics
+        # Observer-only semantics (derived, never driving)
         # -----------------------------------------
-        self.current_area = None  # resolved automatically
+        self.current_area = None
 
         # -----------------------------------------
         # Time anchor
@@ -48,6 +52,9 @@ class WalkerBot:
     # =================================================
 
     def set_target(self, xyz):
+        """
+        Assign a physical destination in world space.
+        """
         self.target = [
             float(xyz[0]),
             float(xyz[1]),
@@ -59,8 +66,12 @@ class WalkerBot:
     # =================================================
 
     def tick(self, clock):
+        """
+        Advance the walker using world time.
+        """
         now = clock.world_datetime
 
+        # Initialise time anchor
         if self._last_time is None:
             self._last_time = now
             return
@@ -73,10 +84,11 @@ class WalkerBot:
 
         minutes = delta_seconds / 60.0
 
+        # Move physically if a target exists
         if self.target is not None:
             self._move(minutes)
 
-        # ALWAYS re-resolve semantic location
+        # ALWAYS resolve semantic area after movement
         self._resolve_current_area()
 
     def _move(self, minutes):
@@ -86,6 +98,9 @@ class WalkerBot:
 
         distance = math.sqrt(dx * dx + dy * dy + dz * dz)
 
+        # -----------------------------------------
+        # Arrival check
+        # -----------------------------------------
         if distance <= self.arrival_threshold:
             self.target = None
             return
@@ -98,17 +113,20 @@ class WalkerBot:
         self.position[2] += dz * scale
 
     # =================================================
-    # SEMANTIC RESOLUTION (KEY FIX)
+    # SEMANTIC RESOLUTION (GEOMETRY ONLY)
     # =================================================
 
     def _resolve_current_area(self):
         """
-        Determine which room / place the walker is inside
+        Determine which room or place the walker is inside,
         based purely on world geometry.
         """
+
         xyz = tuple(self.position)
 
-        # Check rooms first (more specific)
+        # -----------------------------------------
+        # Check rooms first (most specific)
+        # -----------------------------------------
         for place in self.world.places.values():
             if hasattr(place, "rooms"):
                 for room in place.rooms.values():
@@ -116,12 +134,17 @@ class WalkerBot:
                         self.current_area = room.name
                         return
 
-        # Fallback to places
+        # -----------------------------------------
+        # Fallback to place volumes
+        # -----------------------------------------
         for place in self.world.places.values():
             if place.contains_world_point(xyz):
                 self.current_area = place.name
                 return
 
+        # -----------------------------------------
+        # Outside all known areas
+        # -----------------------------------------
         self.current_area = None
 
     # =================================================
@@ -131,7 +154,11 @@ class WalkerBot:
     def snapshot(self):
         return {
             "agent": self.name,
-            "position_xyz": [round(v, 2) for v in self.position],
+            "position_xyz": [
+                round(self.position[0], 2),
+                round(self.position[1], 2),
+                round(self.position[2], 2),
+            ],
             "target_xyz": self.target,
             "current_area": self.current_area,
             "speed_m_per_min": self.speed,
