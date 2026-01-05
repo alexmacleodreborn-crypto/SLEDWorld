@@ -36,7 +36,6 @@ class WorldState:
     def tick(self):
         """
         Advances all world agents using world time.
-        Safe even if no agents exist.
         """
         for agent in self.agents:
             agent.tick(self.clock)
@@ -44,8 +43,8 @@ class WorldState:
 
 def build_world(clock):
     """
-    Constructs the base world with places and a simple walker agent.
-    No A7DO. No cognition. Pure world layer.
+    Constructs the base world with places and one physical walker.
+    Pure world layer. No cognition.
     """
 
     world = WorldState(clock)
@@ -72,14 +71,15 @@ def build_world(clock):
     world.add_place(house)
 
     # -------------------------
-    # Walker Bot (PHYSICAL anchor ONLY)
+    # Walker Bot (PHYSICAL, XYZ-based)
     # -------------------------
     walker = WalkerBot(
         name="Walker-1",
-        start_xyz=house.position,   # ✅ matches WalkerBot signature exactly
+        start_xyz=house.position,  # ✅ correct anchor
+        world=world,               # ✅ semantic resolution source
     )
 
-    # Physical destination (XYZ only)
+    # Optional initial destination
     walker.set_target(park.position)
 
     world.add_agent(walker)
