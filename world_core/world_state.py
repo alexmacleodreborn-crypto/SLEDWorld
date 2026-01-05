@@ -1,65 +1,42 @@
-from typing import Dict, List
-from world_core.world_clock import WorldClock
-
-
 class WorldState:
     """
-    Root container for the entire physical world.
+    Canonical world container.
 
-    Owns:
-    - World clock
-    - All places
-    - All world objects
-    - All agents (later)
+    - Holds all places
+    - Holds all static world objects
+    - No agents
+    - No perception
+    - No cognition
     """
 
-    def __init__(self, acceleration: float = 60.0):
-        # ----------------------------------
-        # TIME (authoritative)
-        # ----------------------------------
-        self.clock = WorldClock(acceleration=acceleration)
+    def __init__(self):
+        # Places indexed by name
+        self.places: dict[str, object] = {}
 
-        # ----------------------------------
-        # WORLD STRUCTURE
-        # ----------------------------------
-        self.places: Dict[str, object] = {}
-        self.objects: List[object] = []
+    # -------------------------
+    # Place management
+    # -------------------------
 
-    # ----------------------------------
-    # WORLD TICK
-    # ----------------------------------
-
-    def tick(self, real_seconds: float):
+    def add_place(self, place):
         """
-        Advance the world by real_seconds.
+        Register a place in the world.
         """
-        self.clock.tick(real_seconds=real_seconds)
+        if place.name in self.places:
+            raise ValueError(f"Place already exists: {place.name}")
 
-        # Tick all places
-        for place in self.places.values():
-            if hasattr(place, "tick"):
-                place.tick(real_seconds)
+        self.places[place.name] = place
 
-        # Tick all world objects
-        for obj in self.objects:
-            if hasattr(obj, "tick"):
-                obj.tick(real_seconds)
-
-    # ----------------------------------
-    # OBSERVER SNAPSHOT
-    # ----------------------------------
+    # -------------------------
+    # Observer snapshot
+    # -------------------------
 
     def snapshot(self):
+        """
+        Full world snapshot (observer only).
+        """
         return {
-            "time": self.clock.snapshot(),
             "places": {
                 name: place.snapshot()
                 for name, place in self.places.items()
-                if hasattr(place, "snapshot")
-            },
-            "objects": [
-                obj.snapshot()
-                for obj in self.objects
-                if hasattr(obj, "snapshot")
-            ],
+            }
         }
