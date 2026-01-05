@@ -32,7 +32,7 @@ world = st.session_state.world
 if hasattr(world, "clock"):
     clock = world.clock
 else:
-    clock = world["clock"]
+    clock = world.clock
 
 
 # ======================================================
