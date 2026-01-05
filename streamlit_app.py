@@ -69,7 +69,7 @@ real_seconds = st.sidebar.slider(
 
 if real_seconds > 0:
     clock.tick(real_seconds=real_seconds)
-    world.tick(clock)
+    world.tick()
 
 # ==================================================
 # Main Display
