@@ -22,12 +22,24 @@ class RoomProfile(WorldObject):
         width, depth, height = size
         x, y, z = position
 
-        # World-space bounding box
-        self.set_bounds(
-            min_xyz=(x, y, z),
-            max_xyz=(x + width, y + depth, z + height),
+        # -----------------------------------------
+        # World-space bounding box (explicit)
+        # -----------------------------------------
+        self.min_xyz = (
+            float(x),
+            float(y),
+            float(z),
         )
 
+        self.max_xyz = (
+            float(x + width),
+            float(y + depth),
+            float(z + height),
+        )
+
+        # -----------------------------------------
+        # Physical properties
+        # -----------------------------------------
         self.size = {
             "width": float(width),
             "depth": float(depth),
@@ -37,6 +49,22 @@ class RoomProfile(WorldObject):
         self.floor = int(floor)
         self.room_type = room_type
 
+    # -----------------------------------------
+    # Geometry test (CRITICAL)
+    # -----------------------------------------
+
+    def contains_world_point(self, xyz: tuple[float, float, float]) -> bool:
+        x, y, z = xyz
+        return (
+            self.min_xyz[0] <= x <= self.max_xyz[0]
+            and self.min_xyz[1] <= y <= self.max_xyz[1]
+            and self.min_xyz[2] <= z <= self.max_xyz[2]
+        )
+
+    # -----------------------------------------
+    # Observer snapshot
+    # -----------------------------------------
+
     def snapshot(self):
         base = super().snapshot()
         base.update({
@@ -44,5 +72,9 @@ class RoomProfile(WorldObject):
             "room_type": self.room_type,
             "floor": self.floor,
             "size": self.size,
+            "bounds": {
+                "min": self.min_xyz,
+                "max": self.max_xyz,
+            },
         })
         return base
