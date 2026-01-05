@@ -1,91 +1,72 @@
-import random
+# world_core/walker_bot.py
+
 import math
 
 
 class WalkerBot:
     """
-    Minimal world agent for validating spatial grounding.
-
-    - Exists purely in world space (XYZ)
-    - No cognition, no symbols
-    - Anchored to a real position
+    Physical world walker.
+    Moves through XYZ space using world time.
     """
 
-    def __init__(
-        self,
-        name: str,
-        house,                 # HouseProfile instance
-        speed: float = 1.2,    # meters per world minute
-        seed: int = 42,
-    ):
+    def __init__(self, name: str, house):
         self.name = name
-        self.house = house
-        self.speed = speed
-        self.rng = random.Random(seed)
 
-        # -----------------------------------------
-        # Choose a RANDOM bedroom as anchor
-        # -----------------------------------------
-        bedrooms = [
-            room_id for room_id, room in house.rooms.items()
-            if room["type"] == "bedroom"
-        ]
+        # Start at house position
+        self.position = list(house.position)  # [x, y, z]
+        self.current_room = 0
 
-        chosen_room = self.rng.choice(bedrooms)
+        self.target = None
+        self.speed = 1.2  # meters per minute (walking)
 
-        # -----------------------------------------
-        # Anchor position (XYZ)
-        # -----------------------------------------
-        hx, hy, hz = house.position
-
-        # Small random offset within the house footprint
-        dx = self.rng.uniform(-house.footprint[0] / 4, house.footprint[0] / 4)
-        dy = self.rng.uniform(-house.footprint[1] / 4, house.footprint[1] / 4)
-
-        self.position = [
-            hx + dx,
-            hy + dy,
-            house.rooms[chosen_room]["z"] * 3.0,  # floor height ~3m
-        ]
-
-        self.current_room = chosen_room
-        self.target = None  # XYZ target
+        self._last_time = None  # world_datetime anchor
 
     # -----------------------------------------
-    # TARGETING
+    # Navigation
     # -----------------------------------------
 
-    def set_target(self, position: tuple[float, float, float]):
-        self.target = list(position)
+    def set_target(self, xyz):
+        self.target = list(xyz)
 
     # -----------------------------------------
     # WORLD TICK
     # -----------------------------------------
 
     def tick(self, clock):
-        """
-        Move toward target using world time.
-        """
-        if not self.target:
+        if self.target is None:
             return
 
-        # Distance vector
+        # --- time delta (minutes) ---
+        now = clock.world_datetime
+        if self._last_time is None:
+            self._last_time = now
+            return
+
+        delta_seconds = (now - self._last_time).total_seconds()
+        self._last_time = now
+
+        minutes = delta_seconds / 60.0
+        if minutes <= 0:
+            return
+
+        # --- movement ---
+        self._move_towards_target(minutes)
+
+    def _move_towards_target(self, minutes):
         dx = self.target[0] - self.position[0]
         dy = self.target[1] - self.position[1]
         dz = self.target[2] - self.position[2]
 
-        dist = math.sqrt(dx*dx + dy*dy + dz*dz)
+        distance = math.sqrt(dx*dx + dy*dy + dz*dz)
+        if distance < 0.5:
+            return  # arrived
 
-        if dist < 0.1:
-            self.target = None
-            return
+        step = self.speed * minutes
+        scale = min(step / distance, 1.0)
 
-        step = self.speed * clock.minutes_per_tick
-        ratio = min(1.0, step / dist)
-
-        self.position[0] += dx * ratio
-        self.position[1] += dy * ratio
-        self.position[2] += dz * ratio
+        self.position[0] += dx * scale
+        self.position[1] += dy * scale
+        self.position[2] += dz * scale  # see Z fix below
 
     # -----------------------------------------
     # OBSERVER VIEW
@@ -94,7 +75,11 @@ class WalkerBot:
     def snapshot(self):
         return {
             "agent": self.name,
-            "position_xyz": tuple(round(v, 2) for v in self.position),
+            "position_xyz": [
+                round(self.position[0], 2),
+                round(self.position[1], 2),
+                round(self.position[2], 2),
+            ],
+            "target_xyz": self.target,
             "current_room": self.current_room,
-            "target_xyz": tuple(self.target) if self.target else None,
         }
