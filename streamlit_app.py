@@ -1,147 +1,116 @@
 import streamlit as st
-import matplotlib.pyplot as plt
 
 from world_core.bootstrap import build_world
+from world_core.world_clock import WorldClock
 
-
-# ======================================================
+# ==================================================
 # Streamlit config
-# ======================================================
-
+# ==================================================
 st.set_page_config(
     page_title="SLED World – World Frame",
-    layout="wide",
+    layout="wide"
 )
 
-
-# ======================================================
+# ==================================================
 # Session initialisation
-# ======================================================
-
+# ==================================================
 if "world" not in st.session_state:
     st.session_state.world = build_world()
 
+if "clock" not in st.session_state:
+    # acceleration = WORLD seconds per REAL second
+    st.session_state.clock = WorldClock(acceleration=60)
+
 world = st.session_state.world
+clock = st.session_state.clock
 
-
-# ======================================================
-# CLOCK ACCESS (robust)
-# ======================================================
-
-# Support both object-style and dict-style worlds
-if hasattr(world, "clock"):
-    clock = world.clock
-else:
-    clock = world.clock
-
-
-# ======================================================
-# World clock control (OBSERVER)
-# ======================================================
-
-st.sidebar.header("World Clock")
+# ==================================================
+# Sidebar – World Clock Controls
+# ==================================================
+st.sidebar.header("World Clock Controls")
 
 accel = st.sidebar.slider(
-    "Time acceleration (world seconds per real second)",
+    "Acceleration (world seconds per real second)",
     min_value=1,
     max_value=3600,
-    value=getattr(clock, "acceleration", 60),
-    step=1,
+    value=int(clock.acceleration),
+)
+clock.acceleration = accel  # clock is independent of world (intentional)
+
+step_minutes = st.sidebar.selectbox(
+    "Step size (minutes)",
+    [1, 5, 15, 30, 60, 180, 720, 1440],
+    index=2
 )
 
-clock.acceleration = accel
+colA, colB = st.sidebar.columns(2)
 
-step_real_seconds = st.sidebar.slider(
-    "Step (real seconds)",
-    min_value=0.1,
+with colA:
+    if st.button("Tick +1 step"):
+        clock.tick(minutes=step_minutes)
+
+with colB:
+    if st.button("Tick +10 steps"):
+        clock.tick(minutes=step_minutes * 10)
+
+st.sidebar.divider()
+
+real_seconds = st.sidebar.slider(
+    "Auto step (real seconds)",
+    min_value=0.0,
     max_value=5.0,
-    value=1.0,
-    step=0.1,
+    value=0.0,
+    step=0.1
 )
 
+if real_seconds > 0:
+    # Continuous time advance (observer-controlled)
+    clock.tick(real_seconds=real_seconds)
 
-# ======================================================
-# World tick (SAFE)
-# ======================================================
-
-# Advance world time
-clock.tick(real_seconds=step_real_seconds)
-
-# Advance world systems (if method exists)
-if hasattr(world, "tick"):
-    world.tick()
-
-
-# ======================================================
-# WORLD MAP RENDERER
-# ======================================================
-
-def render_world_map(world):
-    fig, ax = plt.subplots(figsize=(8, 8))
-
-    places = world.places if hasattr(world, "places") else world["places"]
-
-    for name, place in places.items():
-        b = place.bounds
-
-        x0, x1 = b["x"]
-        y0, y1 = b["y"]
-
-        width = x1 - x0
-        height = y1 - y0
-
-        ax.add_patch(
-            plt.Rectangle(
-                (x0, y0),
-                width,
-                height,
-                fill=False,
-                linewidth=2,
-            )
-        )
-
-        ax.text(
-            x0 + width / 2,
-            y0 + height / 2,
-            name,
-            ha="center",
-            va="center",
-            fontsize=9,
-        )
-
-    ax.set_title("World Map (Top-Down XY Projection)")
-    ax.set_xlabel("X")
-    ax.set_ylabel("Y")
-    ax.set_aspect("equal", adjustable="box")
-    ax.grid(True)
-
-    return fig
-
-
-# ======================================================
-# DISPLAY
-# ======================================================
-
+# ==================================================
+# Main Display
+# ==================================================
 st.title("SLED World – World Frame")
 
+# --------------------------
+# World Time
+# --------------------------
 st.subheader("World Time")
 st.json(clock.snapshot())
 
-
-st.subheader("World Places")
-places = world.places if hasattr(world, "places") else world["places"]
-
-for name, place in places.items():
-    st.markdown(f"### {name}")
-    st.json(place.snapshot())
-
-
-st.subheader("World Map")
-fig = render_world_map(world)
-st.pyplot(fig)
-
-
 st.caption(
-    "Observer-only world frame. "
-    "No agents. No perception. No Sandy’s Law gating yet."
+    f"World clock running at {clock.acceleration}× real time · "
+    f"Step size: {step_minutes} minutes"
+)
+
+# --------------------------
+# World Summary (NEW – SAFE)
+# --------------------------
+st.subheader("World Summary")
+st.json({
+    "num_places": len(world.places),
+    "place_names": list(world.places.keys()),
+})
+
+# --------------------------
+# World Places
+# --------------------------
+st.subheader("World Places")
+
+for name, place in world.places.items():
+    with st.expander(name, expanded=False):
+        st.json(place.snapshot())
+
+# --------------------------
+# World Agents (placeholder)
+# --------------------------
+st.subheader("World Agents")
+st.write("No active agents loaded in world frame.")
+
+# ==================================================
+# Footer
+# ==================================================
+st.caption(
+    "This view represents the objective world frame. "
+    "No cognitive agents perceive this layer directly."
 )
