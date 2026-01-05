@@ -50,12 +50,12 @@ colA, colB = st.sidebar.columns(2)
 with colA:
     if st.button("Tick +1 step"):
         clock.tick(minutes=step_minutes)
-        world.tick(clock)
+        world.tick()
 
 with colB:
     if st.button("Tick +10 steps"):
         clock.tick(minutes=step_minutes * 10)
-        world.tick(clock)
+        world.tick()
 
 st.sidebar.divider()
 
