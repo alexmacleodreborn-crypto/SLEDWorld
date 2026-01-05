@@ -1,23 +1,23 @@
+# world_core/place.py
+
 class Place:
     """
-    Physical location in the world.
+    A real-world location (park, house, road).
     """
 
-    def __init__(self, name):
+    def __init__(self, name, origin, size, profile):
         self.name = name
-        self.agents = []
+        self.origin = origin
+        self.size = size
+        self.profile = profile
+        self.objects = []
 
-    def enter(self, agent):
-        if agent not in self.agents:
-            self.agents.append(agent)
-            agent.location = self
-
-    def leave(self, agent):
-        if agent in self.agents:
-            self.agents.remove(agent)
+    def populate(self):
+        self.objects = self.profile.generate(self.origin, self.size)
 
     def snapshot(self):
         return {
-            "name": self.name,
-            "agents": [a.name for a in self.agents],
+            "place": self.name,
+            "object_count": len(self.objects),
+            "profile": self.profile.name,
         }
