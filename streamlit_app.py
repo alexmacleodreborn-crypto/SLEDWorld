@@ -12,17 +12,19 @@ st.set_page_config(
 )
 
 # ==================================================
-# Session initialisation
+# Session initialisation (ORDER MATTERS)
 # ==================================================
-if "world" not in st.session_state:
-    st.session_state.world = build_world()
-
 if "clock" not in st.session_state:
     # acceleration = WORLD seconds per REAL second
     st.session_state.clock = WorldClock(acceleration=60)
 
-world = st.session_state.world
 clock = st.session_state.clock
+
+if "world" not in st.session_state:
+    # ✅ FIX: pass clock into build_world
+    st.session_state.world = build_world(clock)
+
+world = st.session_state.world
 
 # ==================================================
 # Sidebar – World Clock Controls
@@ -35,7 +37,7 @@ accel = st.sidebar.slider(
     max_value=3600,
     value=int(clock.acceleration),
 )
-clock.acceleration = accel  # clock is independent of world (intentional)
+clock.acceleration = accel
 
 step_minutes = st.sidebar.selectbox(
     "Step size (minutes)",
@@ -48,10 +50,12 @@ colA, colB = st.sidebar.columns(2)
 with colA:
     if st.button("Tick +1 step"):
         clock.tick(minutes=step_minutes)
+        world.tick(clock)
 
 with colB:
     if st.button("Tick +10 steps"):
         clock.tick(minutes=step_minutes * 10)
+        world.tick(clock)
 
 st.sidebar.divider()
 
@@ -64,8 +68,8 @@ real_seconds = st.sidebar.slider(
 )
 
 if real_seconds > 0:
-    # Continuous time advance (observer-controlled)
     clock.tick(real_seconds=real_seconds)
+    world.tick(clock)
 
 # ==================================================
 # Main Display
@@ -82,19 +86,21 @@ st.caption(
     f"World clock running at {clock.acceleration}× real time · "
     f"Step size: {step_minutes} minutes"
 )
+
 # --------------------------
-# World grid
+# World Grid
 # --------------------------
 st.subheader("World Grid")
 st.json(world.grid.snapshot())
 
 # --------------------------
-# World Summary (NEW – SAFE)
+# World Summary
 # --------------------------
 st.subheader("World Summary")
 st.json({
     "num_places": len(world.places),
     "place_names": list(world.places.keys()),
+    "num_agents": len(world.agents),
 })
 
 # --------------------------
@@ -107,15 +113,20 @@ for name, place in world.places.items():
         st.json(place.snapshot())
 
 # --------------------------
-# World Agents (placeholder)
+# World Agents (NOW LIVE)
 # --------------------------
 st.subheader("World Agents")
-st.write("No active agents loaded in world frame.")
+
+if not world.agents:
+    st.write("No active agents.")
+else:
+    for agent in world.agents:
+        st.json(agent.snapshot())
 
 # ==================================================
 # Footer
 # ==================================================
 st.caption(
     "This view represents the objective world frame. "
-    "No cognitive agents perceive this layer directly."
+    "Agents move according to world time, not perception."
 )
