@@ -12,32 +12,56 @@ class WalkerBot:
     Purpose:
     - Validate world geometry
     - Validate time scaling
-    - Validate sound propagation
+    - Validate sound propagation (INCLUDING BLEED)
     - Validate interaction affordances
+
+    Rules:
+    - Moves continuously in XYZ using world time
+    - NEVER stops
+    - Semantic location is ALWAYS defined
+    - No cognition
+    - No learning
     """
 
     def __init__(self, name: str, start_xyz, world):
         self.name = name
         self.world = world
 
+        # -----------------------------------------
+        # Physical state
+        # -----------------------------------------
         self.position = [
             float(start_xyz[0]),
             float(start_xyz[1]),
             float(start_xyz[2]),
         ]
 
-        self.speed = 1.2
+        self.speed = 1.2  # m/min
         self.arrival_threshold = 0.5
 
+        # -----------------------------------------
+        # Navigation
+        # -----------------------------------------
         self.target = None
         self.target_label = None
 
+        # -----------------------------------------
+        # Semantic + sensory state
+        # -----------------------------------------
         self.current_area = "world"
         self.heard_sound_level = 0.0
+
+        # -----------------------------------------
+        # Observer ledger
+        # -----------------------------------------
         self.ledger = []
 
+        # -----------------------------------------
+        # Time anchor
+        # -----------------------------------------
         self._last_time = None
 
+        # Bootstrap
         self._pick_new_target()
         self._resolve_current_area()
         self._log("initialised")
@@ -182,25 +206,60 @@ class WalkerBot:
         self.current_area = "world"
 
     # =================================================
-    # SENSING (SOUND)
+    # SENSING (SOUND WITH BLEED)
     # =================================================
 
     def _sense_sound(self):
-        self.heard_sound_level = 0.0
+        """
+        Hear sound from ALL rooms with distance attenuation.
+        """
+        total_sound = 0.0
+        x, y, z = self.position
 
         for place in self.world.places.values():
             if hasattr(place, "rooms"):
                 for room in place.rooms.values():
-                    if room.contains_world_point(tuple(self.position)):
-                        if hasattr(room, "get_sound_level"):
-                            self.heard_sound_level = room.get_sound_level()
-                            return
+
+                    if not hasattr(room, "get_sound_level"):
+                        continue
+
+                    source_level = room.get_sound_level()
+                    if source_level <= 0:
+                        continue
+
+                    # Room center
+                    (min_x, min_y, min_z), (max_x, max_y, max_z) = room.bounds
+                    cx = (min_x + max_x) / 2
+                    cy = (min_y + max_y) / 2
+                    cz = (min_z + max_z) / 2
+
+                    dx = x - cx
+                    dy = y - cy
+                    dz = z - cz
+                    distance = math.sqrt(dx*dx + dy*dy + dz*dz)
+
+                    # Attenuation model
+                    if distance < 1.0:
+                        attenuation = 1.0
+                    else:
+                        attenuation = 1.0 / (distance ** 2)
+
+                    total_sound += source_level * attenuation
+
+        self.heard_sound_level = round(min(total_sound, 1.0), 3)
+
+        if self.heard_sound_level > 0:
+            self._log(f"heard_sound:{self.heard_sound_level}")
 
     # =================================================
     # PHYSICAL INTERACTION (DEMO)
     # =================================================
 
     def _auto_interact(self):
+        """
+        Ghost behaviour:
+        - Occasionally toggles or adjusts TV in living room
+        """
         for place in self.world.places.values():
             if hasattr(place, "rooms"):
                 for room in place.rooms.values():
@@ -230,7 +289,7 @@ class WalkerBot:
             "current_area": self.current_area,
             "destination": self.target_label,
             "distance_to_target_m": distance,
-            "heard_sound_level": round(self.heard_sound_level, 2),
+            "heard_sound_level": self.heard_sound_level,
             "speed_m_per_min": self.speed,
             "ledger_tail": self.ledger[-5:],
         }
