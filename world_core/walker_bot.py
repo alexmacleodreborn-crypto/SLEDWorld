@@ -14,64 +14,36 @@ class WalkerBot:
     - Validate time scaling
     - Validate sound propagation
     - Validate interaction affordances
-
-    Rules:
-    - Moves continuously in XYZ using world time
-    - NEVER stops
-    - Semantic location is ALWAYS defined
-    - No cognition
-    - No learning
     """
 
     def __init__(self, name: str, start_xyz, world):
         self.name = name
-        self.world = world  # READ-ONLY reference
+        self.world = world
 
-        # -----------------------------------------
-        # Physical state
-        # -----------------------------------------
         self.position = [
             float(start_xyz[0]),
             float(start_xyz[1]),
             float(start_xyz[2]),
         ]
 
-        self.speed = 1.2  # meters per minute
+        self.speed = 1.2
         self.arrival_threshold = 0.5
 
-        # -----------------------------------------
-        # Navigation
-        # -----------------------------------------
         self.target = None
         self.target_label = None
 
-        # -----------------------------------------
-        # Semantic state (NEVER NULL)
-        # -----------------------------------------
         self.current_area = "world"
-
-        # -----------------------------------------
-        # Sensory state (observer only)
-        # -----------------------------------------
         self.heard_sound_level = 0.0
-
-        # -----------------------------------------
-        # Observer ledger
-        # -----------------------------------------
         self.ledger = []
 
-        # -----------------------------------------
-        # Time anchor
-        # -----------------------------------------
         self._last_time = None
 
-        # Initial destination
         self._pick_new_target()
         self._resolve_current_area()
         self._log("initialised")
 
     # =================================================
-    # INTERNAL LOGGING (OBSERVER ONLY)
+    # INTERNAL LOGGING
     # =================================================
 
     def _log(self, event: str):
@@ -173,10 +145,11 @@ class WalkerBot:
         dy = self.target[1] - self.position[1]
         dz = self.target[2] - self.position[2]
 
-        distance = math.sqrt(dx * dx + dy * dy + dz * dz)
+        distance = math.sqrt(dx*dx + dy*dy + dz*dz)
 
         if distance <= self.arrival_threshold:
-            self._log(f"arrived:{self.target_label}")
+            self._resolve_current_area()
+            self._log(f"arrived:{self.current_area}")
             self._pick_new_target()
             return
 
@@ -209,7 +182,7 @@ class WalkerBot:
         self.current_area = "world"
 
     # =================================================
-    # SENSING (SOUND ONLY)
+    # SENSING (SOUND)
     # =================================================
 
     def _sense_sound(self):
@@ -218,20 +191,16 @@ class WalkerBot:
         for place in self.world.places.values():
             if hasattr(place, "rooms"):
                 for room in place.rooms.values():
-                    if room.name == self.current_area:
+                    if room.contains_world_point(tuple(self.position)):
                         if hasattr(room, "get_sound_level"):
                             self.heard_sound_level = room.get_sound_level()
                             return
 
     # =================================================
-    # PHYSICAL INTERACTION (DEMO ONLY)
+    # PHYSICAL INTERACTION (DEMO)
     # =================================================
 
     def _auto_interact(self):
-        """
-        Ghost behaviour:
-        - If in living room and TV exists, randomly toggle / adjust
-        """
         for place in self.world.places.values():
             if hasattr(place, "rooms"):
                 for room in place.rooms.values():
@@ -263,5 +232,5 @@ class WalkerBot:
             "distance_to_target_m": distance,
             "heard_sound_level": round(self.heard_sound_level, 2),
             "speed_m_per_min": self.speed,
-            "ledger_tail": self.ledger[-5:],  # last 5 events
+            "ledger_tail": self.ledger[-5:],
         }
