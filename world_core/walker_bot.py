@@ -2,17 +2,25 @@
 
 import math
 import random
+from datetime import datetime
 
 
 class WalkerBot:
     """
-    Physical world walker.
+    Ghost / probe agent.
+
+    Purpose:
+    - Validate world geometry
+    - Validate time scaling
+    - Validate sound propagation
+    - Validate interaction affordances
 
     Rules:
     - Moves continuously in XYZ using world time
     - NEVER stops
     - Semantic location is ALWAYS defined
-    - Semantics are DERIVED from geometry only
+    - No cognition
+    - No learning
     """
 
     def __init__(self, name: str, start_xyz, world):
@@ -35,11 +43,22 @@ class WalkerBot:
         # Navigation
         # -----------------------------------------
         self.target = None
+        self.target_label = None
 
         # -----------------------------------------
         # Semantic state (NEVER NULL)
         # -----------------------------------------
         self.current_area = "world"
+
+        # -----------------------------------------
+        # Sensory state (observer only)
+        # -----------------------------------------
+        self.heard_sound_level = 0.0
+
+        # -----------------------------------------
+        # Observer ledger
+        # -----------------------------------------
+        self.ledger = []
 
         # -----------------------------------------
         # Time anchor
@@ -49,22 +68,28 @@ class WalkerBot:
         # Initial destination
         self._pick_new_target()
         self._resolve_current_area()
+        self._log("initialised")
 
     # =================================================
-    # GEOMETRY HELPERS (CRITICAL FIX)
+    # INTERNAL LOGGING (OBSERVER ONLY)
+    # =================================================
+
+    def _log(self, event: str):
+        self.ledger.append({
+            "time": datetime.utcnow().isoformat(timespec="seconds"),
+            "event": event,
+            "area": self.current_area,
+        })
+
+    # =================================================
+    # GEOMETRY HELPERS
     # =================================================
 
     def _get_bounds(self, obj):
-        """
-        Return ((min_x, min_y, min_z), (max_x, max_y, max_z))
-        or None if object has no volume.
-        """
         if hasattr(obj, "bounds") and obj.bounds is not None:
             return obj.bounds
-
         if hasattr(obj, "min_xyz") and hasattr(obj, "max_xyz"):
             return (obj.min_xyz, obj.max_xyz)
-
         return None
 
     def _random_point_in_bounds(self, bounds):
@@ -76,45 +101,40 @@ class WalkerBot:
         ]
 
     # =================================================
-    # TARGET SELECTION (VOLUME-AWARE)
+    # TARGET SELECTION
     # =================================================
 
     def _pick_new_target(self):
-        """
-        Select a random physical point inside:
-        - a room (preferred)
-        - otherwise inside a place
-        """
-        room_bounds = []
-        place_bounds = []
+        room_targets = []
+        place_targets = []
 
         for place in self.world.places.values():
-            # Rooms first
             if hasattr(place, "rooms"):
                 for room in place.rooms.values():
                     bounds = self._get_bounds(room)
                     if bounds:
-                        room_bounds.append((room.name, bounds))
+                        room_targets.append((room.name, bounds))
 
-            # Place volume
             bounds = self._get_bounds(place)
             if bounds:
-                place_bounds.append((place.name, bounds))
+                place_targets.append((place.name, bounds))
 
-        # Prefer rooms
-        if room_bounds:
-            _, bounds = random.choice(room_bounds)
+        if room_targets:
+            label, bounds = random.choice(room_targets)
             self.target = self._random_point_in_bounds(bounds)
+            self.target_label = label
+            self._log(f"new_target_room:{label}")
             return
 
-        # Fallback: places
-        if place_bounds:
-            _, bounds = random.choice(place_bounds)
+        if place_targets:
+            label, bounds = random.choice(place_targets)
             self.target = self._random_point_in_bounds(bounds)
+            self.target_label = label
+            self._log(f"new_target_place:{label}")
             return
 
-        # Absolute fallback
         self.target = None
+        self.target_label = None
 
     # =================================================
     # WORLD TICK
@@ -137,6 +157,12 @@ class WalkerBot:
 
         self._move(minutes)
         self._resolve_current_area()
+        self._sense_sound()
+        self._auto_interact()
+
+    # =================================================
+    # MOVEMENT
+    # =================================================
 
     def _move(self, minutes):
         if self.target is None:
@@ -150,6 +176,7 @@ class WalkerBot:
         distance = math.sqrt(dx * dx + dy * dy + dz * dz)
 
         if distance <= self.arrival_threshold:
+            self._log(f"arrived:{self.target_label}")
             self._pick_new_target()
             return
 
@@ -161,13 +188,12 @@ class WalkerBot:
         self.position[2] += dz * scale
 
     # =================================================
-    # SEMANTIC RESOLUTION (NEVER NULL)
+    # SEMANTIC RESOLUTION
     # =================================================
 
     def _resolve_current_area(self):
         xyz = tuple(self.position)
 
-        # 1️⃣ Rooms (most specific)
         for place in self.world.places.values():
             if hasattr(place, "rooms"):
                 for room in place.rooms.values():
@@ -175,27 +201,67 @@ class WalkerBot:
                         self.current_area = room.name
                         return
 
-        # 2️⃣ Places
         for place in self.world.places.values():
             if place.contains_world_point(xyz):
                 self.current_area = place.name
                 return
 
-        # 3️⃣ World fallback (GUARANTEED)
         self.current_area = "world"
+
+    # =================================================
+    # SENSING (SOUND ONLY)
+    # =================================================
+
+    def _sense_sound(self):
+        self.heard_sound_level = 0.0
+
+        for place in self.world.places.values():
+            if hasattr(place, "rooms"):
+                for room in place.rooms.values():
+                    if room.name == self.current_area:
+                        if hasattr(room, "get_sound_level"):
+                            self.heard_sound_level = room.get_sound_level()
+                            return
+
+    # =================================================
+    # PHYSICAL INTERACTION (DEMO ONLY)
+    # =================================================
+
+    def _auto_interact(self):
+        """
+        Ghost behaviour:
+        - If in living room and TV exists, randomly toggle / adjust
+        """
+        for place in self.world.places.values():
+            if hasattr(place, "rooms"):
+                for room in place.rooms.values():
+                    if room.name == self.current_area and "tv" in getattr(room, "objects", {}):
+                        if random.random() < 0.02:
+                            room.interact("tv", "power_toggle")
+                            self._log("tv:power_toggle")
+                        elif random.random() < 0.05:
+                            room.interact("tv", "volume_up")
+                            self._log("tv:volume_up")
 
     # =================================================
     # OBSERVER VIEW
     # =================================================
 
     def snapshot(self):
+        distance = None
+        if self.target:
+            dx = self.target[0] - self.position[0]
+            dy = self.target[1] - self.position[1]
+            dz = self.target[2] - self.position[2]
+            distance = round(math.sqrt(dx*dx + dy*dy + dz*dz), 2)
+
         return {
             "agent": self.name,
             "position_xyz": [round(v, 2) for v in self.position],
-            "target_xyz": (
-                [round(v, 2) for v in self.target]
-                if self.target else None
-            ),
             "current_area": self.current_area,
+            "destination": self.target_label,
+            "distance_to_target_m": distance,
+            "heard_sound_level": round(self.heard_sound_level, 2),
             "speed_m_per_min": self.speed,
+            "ledger_tail": self.ledger[-5:],  # last 5 events
         }
