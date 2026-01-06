@@ -129,15 +129,17 @@ class RoomProfile(WorldObject):
     # =================================================
 
     def interact(self, object_name: str, action: str) -> bool:
-        obj = self.objects.get(object_name)
-        if obj is None:
-            return False
-
-        if hasattr(obj, action):
-            getattr(obj, action)()
-            return True
-
+    """
+    Perform a physical interaction with an object.
+    """
+    obj = self.objects.get(object_name)
+    if obj is None:
         return False
+
+    if hasattr(obj, action):
+        return getattr(obj, action)()
+
+    return False
 
     # =================================================
     # Observer snapshot
