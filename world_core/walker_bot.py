@@ -37,7 +37,7 @@ class WalkerBot:
         self.target = None
 
         # -----------------------------------------
-        # Semantic state (ALWAYS SET)
+        # Semantic state (NEVER NULL)
         # -----------------------------------------
         self.current_area = "world"
 
@@ -51,6 +51,31 @@ class WalkerBot:
         self._resolve_current_area()
 
     # =================================================
+    # GEOMETRY HELPERS (CRITICAL FIX)
+    # =================================================
+
+    def _get_bounds(self, obj):
+        """
+        Return ((min_x, min_y, min_z), (max_x, max_y, max_z))
+        or None if object has no volume.
+        """
+        if hasattr(obj, "bounds") and obj.bounds is not None:
+            return obj.bounds
+
+        if hasattr(obj, "min_xyz") and hasattr(obj, "max_xyz"):
+            return (obj.min_xyz, obj.max_xyz)
+
+        return None
+
+    def _random_point_in_bounds(self, bounds):
+        (min_x, min_y, min_z), (max_x, max_y, max_z) = bounds
+        return [
+            random.uniform(min_x, max_x),
+            random.uniform(min_y, max_y),
+            random.uniform(min_z, max_z),
+        ]
+
+    # =================================================
     # TARGET SELECTION (VOLUME-AWARE)
     # =================================================
 
@@ -60,35 +85,36 @@ class WalkerBot:
         - a room (preferred)
         - otherwise inside a place
         """
-        rooms = []
-        places = []
+        room_bounds = []
+        place_bounds = []
 
         for place in self.world.places.values():
+            # Rooms first
             if hasattr(place, "rooms"):
-                rooms.extend(place.rooms.values())
-            places.append(place)
+                for room in place.rooms.values():
+                    bounds = self._get_bounds(room)
+                    if bounds:
+                        room_bounds.append((room.name, bounds))
 
-        # Prefer rooms if available
-        if rooms:
-            room = random.choice(rooms)
-            self.target = self._random_point_in_bounds(room.bounds)
+            # Place volume
+            bounds = self._get_bounds(place)
+            if bounds:
+                place_bounds.append((place.name, bounds))
+
+        # Prefer rooms
+        if room_bounds:
+            _, bounds = random.choice(room_bounds)
+            self.target = self._random_point_in_bounds(bounds)
             return
 
-        # Fallback: place volume
-        if places:
-            place = random.choice(places)
-            self.target = self._random_point_in_bounds(place.bounds)
+        # Fallback: places
+        if place_bounds:
+            _, bounds = random.choice(place_bounds)
+            self.target = self._random_point_in_bounds(bounds)
             return
 
+        # Absolute fallback
         self.target = None
-
-    def _random_point_in_bounds(self, bounds):
-        (min_x, min_y, min_z), (max_x, max_y, max_z) = bounds
-        return [
-            random.uniform(min_x, max_x),
-            random.uniform(min_y, max_y),
-            random.uniform(min_z, max_z),
-        ]
 
     # =================================================
     # WORLD TICK
@@ -108,6 +134,7 @@ class WalkerBot:
             return
 
         minutes = delta_seconds / 60.0
+
         self._move(minutes)
         self._resolve_current_area()
 
@@ -154,7 +181,7 @@ class WalkerBot:
                 self.current_area = place.name
                 return
 
-        # 3️⃣ World fallback (CRITICAL)
+        # 3️⃣ World fallback (GUARANTEED)
         self.current_area = "world"
 
     # =================================================
