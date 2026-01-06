@@ -1,5 +1,3 @@
-# world_core/walker_bot.py
-
 import math
 import random
 from datetime import datetime
@@ -36,7 +34,7 @@ class WalkerBot:
             float(start_xyz[2]),
         ]
 
-        self.speed = 1.2  # m/min
+        self.speed = 1.2  # meters per minute
         self.arrival_threshold = 0.5
 
         # -----------------------------------------
@@ -67,16 +65,11 @@ class WalkerBot:
         self._log("initialised")
 
     # =================================================
-    # INTERNAL LOGGING (WORLD-TIME CONSISTENT)
+    # INTERNAL LOGGING (WORLD TIME)
     # =================================================
 
     def _log(self, event: str):
-        """
-        Log using WORLD time, not real UTC.
-        """
-        t = None
         try:
-            # world clock time if available
             t = self.world.clock.world_datetime.isoformat(timespec="seconds")
         except Exception:
             t = datetime.utcnow().isoformat(timespec="seconds")
@@ -202,7 +195,6 @@ class WalkerBot:
     def _resolve_current_area(self):
         xyz = tuple(self.position)
 
-        # Rooms first
         for place in self.world.places.values():
             if hasattr(place, "rooms"):
                 for room in place.rooms.values():
@@ -210,7 +202,6 @@ class WalkerBot:
                         self.current_area = room.name
                         return
 
-        # Then places
         for place in self.world.places.values():
             if place.contains_world_point(xyz):
                 self.current_area = place.name
@@ -223,12 +214,6 @@ class WalkerBot:
     # =================================================
 
     def _sense_sound(self):
-        """
-        Hear sound from ALL rooms with distance attenuation.
-        Notes:
-        - Uses inverse-square falloff
-        - Adds a small floor so sound doesn't vanish unrealistically fast indoors
-        """
         total_sound = 0.0
         x, y, z = self.position
 
@@ -240,8 +225,8 @@ class WalkerBot:
                 if not hasattr(room, "get_sound_level"):
                     continue
 
-                source_level = room.get_sound_level()
-                if source_level <= 0:
+                source = room.get_sound_level()
+                if source <= 0:
                     continue
 
                 bounds = self._get_bounds(room)
@@ -249,59 +234,58 @@ class WalkerBot:
                     continue
 
                 (min_x, min_y, min_z), (max_x, max_y, max_z) = bounds
-                cx = (min_x + max_x) / 2.0
-                cy = (min_y + max_y) / 2.0
-                cz = (min_z + max_z) / 2.0
+                cx = (min_x + max_x) / 2
+                cy = (min_y + max_y) / 2
+                cz = (min_z + max_z) / 2
 
                 dx = x - cx
                 dy = y - cy
                 dz = z - cz
-                distance = math.sqrt(dx * dx + dy * dy + dz * dz)
+                dist = math.sqrt(dx*dx + dy*dy + dz*dz)
 
-                # Attenuation model
-                if distance < 1.0:
+                if dist < 1.0:
                     attenuation = 1.0
                 else:
-                    attenuation = 1.0 / (distance ** 2)
+                    attenuation = 1.0 / (dist ** 2)
 
-                # Indoor bleed floor (prevents "instant silence" across a wall)
                 attenuation = max(attenuation, 0.02)
-
-                total_sound += source_level * attenuation
+                total_sound += source * attenuation
 
         self.heard_sound_level = round(min(total_sound, 1.0), 3)
 
-        # Log only when non-trivial (prevents ledger spam)
         if self.heard_sound_level >= 0.05:
             self._log(f"heard_sound:{self.heard_sound_level}")
 
     # =================================================
-    # PHYSICAL INTERACTION (DEMO)
+    # PHYSICAL INTERACTION (REMOTE → ROOM → TV)
     # =================================================
 
     def _auto_interact(self):
-    """
-    Ghost behaviour:
-    - If in a room with a remote, use it
-    """
-    for place in self.world.places.values():
-        if hasattr(place, "rooms"):
+        """
+        Ghost behaviour:
+        - If in a room with a remote, use it to control TV
+        """
+        for place in self.world.places.values():
+            if not hasattr(place, "rooms"):
+                continue
+
             for room in place.rooms.values():
                 if room.name != self.current_area:
                     continue
 
-                remote = room.objects.get("remote")
-                if remote is None:
+                if "remote" not in room.objects:
                     return
 
-                # Random demo behaviour
-                if random.random() < 0.02:
-                    if remote.power_toggle():
-                        self._log("remote:power_toggle")
+                # Random demo actions
+                r = random.random()
 
-                elif random.random() < 0.05:
-                    if remote.volume_up():
-                        self._log("remote:volume_up")
+                if r < 0.02:
+                    room.interact("remote", "power_toggle")
+                    self._log("remote:power_toggle")
+
+                elif r < 0.05:
+                    room.interact("remote", "volume_up")
+                    self._log("remote:volume_up")
 
     # =================================================
     # OBSERVER VIEW
@@ -313,7 +297,7 @@ class WalkerBot:
             dx = self.target[0] - self.position[0]
             dy = self.target[1] - self.position[1]
             dz = self.target[2] - self.position[2]
-            distance = round(math.sqrt(dx * dx + dy * dy + dz * dz), 2)
+            distance = round(math.sqrt(dx*dx + dy*dy + dz*dz), 2)
 
         return {
             "agent": self.name,
