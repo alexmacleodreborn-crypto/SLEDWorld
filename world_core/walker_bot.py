@@ -280,40 +280,28 @@ class WalkerBot:
     # =================================================
 
     def _auto_interact(self):
-        """
-        Ghost behaviour:
-        - Occasionally toggles or adjusts TV in living room.
-        Uses room.interact so this will still work when you swap to "remote controls TV".
-        """
-        # Only interact if we're in a room
-        for place in self.world.places.values():
-            if not hasattr(place, "rooms"):
-                continue
-
+    """
+    Ghost behaviour:
+    - If in a room with a remote, use it
+    """
+    for place in self.world.places.values():
+        if hasattr(place, "rooms"):
             for room in place.rooms.values():
                 if room.name != self.current_area:
                     continue
 
-                objs = getattr(room, "objects", {})
-
-                # Prefer remote if present (portable), fallback to tv direct
-                if "remote" in objs:
-                    if random.random() < 0.02:
-                        room.interact("remote", "power_toggle_tv")
-                        self._log("remote:power_toggle_tv")
-                    elif random.random() < 0.05:
-                        room.interact("remote", "volume_up_tv")
-                        self._log("remote:volume_up_tv")
+                remote = room.objects.get("remote")
+                if remote is None:
                     return
 
-                if "tv" in objs:
-                    if random.random() < 0.02:
-                        room.interact("tv", "power_toggle")
-                        self._log("tv:power_toggle")
-                    elif random.random() < 0.05:
-                        room.interact("tv", "volume_up")
-                        self._log("tv:volume_up")
-                    return
+                # Random demo behaviour
+                if random.random() < 0.02:
+                    if remote.power_toggle():
+                        self._log("remote:power_toggle")
+
+                elif random.random() < 0.05:
+                    if remote.volume_up():
+                        self._log("remote:volume_up")
 
     # =================================================
     # OBSERVER VIEW
