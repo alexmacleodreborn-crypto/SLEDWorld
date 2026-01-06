@@ -13,7 +13,7 @@ class RoomProfile(WorldObject):
     Rules:
     - Pure world-layer object
     - Real 3D volume in WORLD coordinates
-    - Contains physical objects (TV, remote, etc.)
+    - Contains physical objects (TV, Remote, etc.)
     - No agents
     - No cognition
     - No time
@@ -51,8 +51,6 @@ class RoomProfile(WorldObject):
 
         self.floor = int(floor)
         self.room_type = str(room_type)
-
-        # Canonical semantic label
         self.label = f"room:{self.room_type}"
 
         # -----------------------------------------
@@ -68,48 +66,43 @@ class RoomProfile(WorldObject):
     def _build_objects(self):
         """
         Populate room with physical objects.
+        CURRENT POLICY:
+        - Every room has a TV
+        - Every room has a Remote
         """
-        # Living room setup
-        if self.room_type == "living_room":
-            (min_x, min_y, min_z), (max_x, max_y, _) = self.bounds
 
-            # --------------------
-            # TV (fixed)
-            # --------------------
-            tv_x = (min_x + max_x) / 2.0
-            tv_y = min_y + 0.5
-            tv_z = min_z + 1.0  # mounted height
+        (min_x, min_y, min_z), (max_x, max_y, _) = self.bounds
 
-            tv = TVProfile(
-                name=f"{self.name}:tv",
-                position=(tv_x, tv_y, tv_z),
-            )
+        # --- TV placement (wall-mounted) ---
+        tv_x = (min_x + max_x) / 2.0
+        tv_y = min_y + 0.4
+        tv_z = min_z + 1.2
 
-            # --------------------
-            # Remote (portable)
-            # --------------------
-            remote = RemoteProfile(
-                name=f"{self.name}:remote",
-                position=(
-                    tv_x - 1.0,
-                    tv_y + 1.0,
-                    min_z + 0.8,  # table height
-                ),
-            )
+        tv = TVProfile(
+            name=f"{self.name}:tv",
+            position=(tv_x, tv_y, tv_z),
+        )
 
-            self.objects["tv"] = tv
-            self.objects["remote"] = remote
+        # --- Remote placement (table height, movable later) ---
+        remote_x = tv_x + random.uniform(-0.5, 0.5)
+        remote_y = tv_y + random.uniform(0.3, 0.8)
+        remote_z = min_z + 0.8
+
+        remote = RemoteProfile(
+            name=f"{self.name}:remote",
+            position=(remote_x, remote_y, remote_z),
+            tv=tv,
+        )
+
+        self.objects["tv"] = tv
+        self.objects["remote"] = remote
 
     # =================================================
-    # Spatial helpers (CRITICAL for walkers)
+    # Spatial helpers
     # =================================================
 
     def random_point_inside(self) -> tuple[float, float, float]:
-        """
-        Return a random WORLD-space point inside this room.
-        """
         (min_x, min_y, min_z), (max_x, max_y, max_z) = self.bounds
-
         return (
             random.uniform(min_x, max_x),
             random.uniform(min_y, max_y),
@@ -117,7 +110,7 @@ class RoomProfile(WorldObject):
         )
 
     # =================================================
-    # Environmental outputs (PHYSICS ONLY)
+    # Environmental outputs
     # =================================================
 
     def get_sound_level(self) -> float:
@@ -128,19 +121,13 @@ class RoomProfile(WorldObject):
         for obj in self.objects.values():
             if hasattr(obj, "sound_level"):
                 total += obj.sound_level()
-
-        # Clamp to physical maximum
         return round(min(total, 1.0), 2)
 
     # =================================================
-    # Interaction surface (PHYSICAL, NOT COGNITIVE)
+    # Interaction surface
     # =================================================
 
     def interact(self, object_name: str, action: str) -> bool:
-        """
-        Perform a physical interaction with an object.
-        Returns True if action was applied.
-        """
         obj = self.objects.get(object_name)
         if obj is None:
             return False
@@ -151,9 +138,9 @@ class RoomProfile(WorldObject):
 
         return False
 
-    # -----------------------------------------
+    # =================================================
     # Observer snapshot
-    # -----------------------------------------
+    # =================================================
 
     def snapshot(self):
         base = super().snapshot()
