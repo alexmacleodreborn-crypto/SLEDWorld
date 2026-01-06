@@ -1,48 +1,55 @@
+# world_core/profiles/park_feature_profile.py
+
 from world_core.world_object import WorldObject
-from world_core.profiles.park_feature_profile import ParkFeatureProfile
 
 
-class ParkProfile(WorldObject):
+class ParkFeatureProfile(WorldObject):
     """
-    A public park in the world.
-    Contains physical sub-areas (pond, swings, chute).
+    A physical feature inside a park (pond, swings, chute, etc).
+
+    Rules:
+    - Pure world-layer object
+    - Has real XYZ volume
+    - Used ONLY for geometric containment + semantic resolution
     """
 
     def __init__(
         self,
         name: str,
         position: tuple[float, float, float],
-        size: tuple[float, float] = (200.0, 200.0),  # width, depth
-        trees: int = 20,
+        size: tuple[float, float, float],  # (width, depth, height)
+        feature_type: str,
     ):
         super().__init__(name=name, position=position)
 
-        self.size = (float(size[0]), float(size[1]))
-        self.trees = int(trees)
-
+        width, depth, height = size
         x, y, z = self.position
 
         # -----------------------------------------
-        # Park world bounds
+        # World-space bounds
         # -----------------------------------------
         self.min_xyz = (x, y, z)
         self.max_xyz = (
-            x + self.size[0],
-            y + self.size[1],
-            z + 5.0,  # shallow vertical extent
+            x + float(width),
+            y + float(depth),
+            z + float(height),
         )
 
         # -----------------------------------------
-        # Park features
+        # Feature metadata
         # -----------------------------------------
-        self.features: dict[str, ParkFeatureProfile] = {}
-        self._build_features()
+        self.feature_type = feature_type
+        self.size = {
+            "width": float(width),
+            "depth": float(depth),
+            "height": float(height),
+        }
 
-    # =================================================
-    # Geometry
-    # =================================================
+    # -----------------------------------------
+    # Geometry test (CRITICAL)
+    # -----------------------------------------
 
-    def contains_world_point(self, xyz):
+    def contains_world_point(self, xyz: tuple[float, float, float]) -> bool:
         x, y, z = xyz
         return (
             self.min_xyz[0] <= x <= self.max_xyz[0]
@@ -50,51 +57,19 @@ class ParkProfile(WorldObject):
             and self.min_xyz[2] <= z <= self.max_xyz[2]
         )
 
-    # =================================================
-    # Feature construction
-    # =================================================
-
-    def _build_features(self):
-        base_x, base_y, base_z = self.position
-
-        self.features["duck_pond"] = ParkFeatureProfile(
-            name=f"{self.name}:duck_pond",
-            position=(base_x + 30, base_y + 30, base_z),
-            size=(40, 40, 2),
-            feature_type="duck_pond",
-        )
-
-        self.features["swings"] = ParkFeatureProfile(
-            name=f"{self.name}:swings",
-            position=(base_x + 100, base_y + 40, base_z),
-            size=(30, 20, 4),
-            feature_type="swings",
-        )
-
-        self.features["chute"] = ParkFeatureProfile(
-            name=f"{self.name}:chute",
-            position=(base_x + 140, base_y + 120, base_z),
-            size=(20, 30, 6),
-            feature_type="chute",
-        )
-
-    # =================================================
+    # -----------------------------------------
     # Observer snapshot
-    # =================================================
+    # -----------------------------------------
 
     def snapshot(self):
         base = super().snapshot()
         base.update({
-            "type": "park",
-            "trees": self.trees,
-            "size": list(self.size),
+            "type": "park_feature",
+            "feature_type": self.feature_type,
+            "size": self.size,
             "bounds": {
                 "min": self.min_xyz,
                 "max": self.max_xyz,
-            },
-            "features": {
-                name: feature.snapshot()
-                for name, feature in self.features.items()
             },
         })
         return base
