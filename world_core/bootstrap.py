@@ -1,8 +1,10 @@
 # world_core/bootstrap.py
 
+from world_core.world_grid import WorldGrid
+from world_core.walker_bot import WalkerBot
+
 from world_core.profiles.park_profile import ParkProfile
 from world_core.profiles.house_profile import HouseProfile
-
 
 
 class WorldState:
@@ -75,8 +77,8 @@ def build_world(clock):
     # -------------------------
     walker = WalkerBot(
         name="Walker-1",
-        start_xyz=house.position,  # physical anchor only
-        world=world,               # read-only world reference
+        start_xyz=house.position,
+        world=world,
     )
 
     world.add_agent(walker)
