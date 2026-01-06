@@ -57,7 +57,7 @@ class RoomProfile(WorldObject):
         # -----------------------------------------
         # Physical objects inside the room
         # -----------------------------------------
-        self.objects = {}
+        self.objects: dict[str, WorldObject] = {}
         self._build_objects()
 
     # =================================================
@@ -100,7 +100,7 @@ class RoomProfile(WorldObject):
         )
 
     # =================================================
-    # Environmental outputs
+    # Environmental outputs (PHYSICS ONLY)
     # =================================================
 
     def get_sound_level(self) -> float:
@@ -111,6 +111,8 @@ class RoomProfile(WorldObject):
         for obj in self.objects.values():
             if hasattr(obj, "sound_level"):
                 total += obj.sound_level()
+
+        # Clamp to physical maximum
         return round(min(total, 1.0), 2)
 
     # =================================================
