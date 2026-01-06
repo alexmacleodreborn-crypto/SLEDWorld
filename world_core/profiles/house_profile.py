@@ -13,13 +13,14 @@ class HouseProfile(WorldObject):
     - Contains rooms as sub-volumes
     """
 
-    FLOOR_HEIGHT = 2500.0  # abstract world meters per floor
+    # ✅ REALISTIC HUMAN SCALE
+    FLOOR_HEIGHT = 2.6  # meters per floor
 
     def __init__(
         self,
         name: str,
         position: tuple[float, float, float],
-        footprint: tuple[float, float],   # (width, depth)
+        footprint: tuple[float, float],   # (width, depth) in meters
         residents: int = 3,
         floors: int = 2,
     ):
