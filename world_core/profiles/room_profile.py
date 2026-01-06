@@ -1,5 +1,6 @@
 # world_core/profiles/room_profile.py
 
+import random
 from world_core.world_object import WorldObject
 
 
@@ -7,9 +8,12 @@ class RoomProfile(WorldObject):
     """
     A room inside a house.
 
+    Rules:
     - Pure world-layer object
     - Real 3D volume in WORLD coordinates
-    - No agents, no cognition, no time
+    - No agents
+    - No cognition
+    - No time
     """
 
     def __init__(
@@ -45,6 +49,26 @@ class RoomProfile(WorldObject):
         self.floor = int(floor)
         self.room_type = str(room_type)
 
+        # Canonical semantic label
+        self.label = f"room:{self.room_type}"
+
+    # =================================================
+    # Spatial helpers (CRITICAL for walkers)
+    # =================================================
+
+    def random_point_inside(self) -> tuple[float, float, float]:
+        """
+        Return a random WORLD-space point inside this room.
+        Used for movement targets.
+        """
+        (min_x, min_y, min_z), (max_x, max_y, max_z) = self.bounds
+
+        return (
+            random.uniform(min_x, max_x),
+            random.uniform(min_y, max_y),
+            random.uniform(min_z, max_z),
+        )
+
     # -----------------------------------------
     # Observer snapshot
     # -----------------------------------------
@@ -53,6 +77,7 @@ class RoomProfile(WorldObject):
         base = super().snapshot()
         base.update({
             "type": "room",
+            "label": self.label,
             "room_type": self.room_type,
             "floor": self.floor,
             "size": self.size,
