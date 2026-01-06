@@ -13,7 +13,7 @@ class RoomProfile(WorldObject):
     Rules:
     - Pure world-layer object
     - Real 3D volume in WORLD coordinates
-    - Contains physical objects (TV, Remote, etc.)
+    - Contains physical objects (TV, remote, etc.)
     - No agents
     - No cognition
     - No time
@@ -51,6 +51,8 @@ class RoomProfile(WorldObject):
 
         self.floor = int(floor)
         self.room_type = str(room_type)
+
+        # Canonical semantic label
         self.label = f"room:{self.room_type}"
 
         # -----------------------------------------
@@ -66,36 +68,38 @@ class RoomProfile(WorldObject):
     def _build_objects(self):
         """
         Populate room with physical objects.
-        CURRENT POLICY:
-        - Every room has a TV
-        - Every room has a Remote
         """
 
-        (min_x, min_y, min_z), (max_x, max_y, _) = self.bounds
+        if self.room_type == "living_room":
+            (min_x, min_y, min_z), (max_x, max_y, _) = self.bounds
 
-        # --- TV placement (wall-mounted) ---
-        tv_x = (min_x + max_x) / 2.0
-        tv_y = min_y + 0.4
-        tv_z = min_z + 1.2
+            # --------------------
+            # TV (fixed in place)
+            # --------------------
+            tv_x = (min_x + max_x) / 2.0
+            tv_y = min_y + 0.5
+            tv_z = min_z + 1.0  # mounted height
 
-        tv = TVProfile(
-            name=f"{self.name}:tv",
-            position=(tv_x, tv_y, tv_z),
-        )
+            tv = TVProfile(
+                name=f"{self.name}:tv",
+                position=(tv_x, tv_y, tv_z),
+            )
 
-        # --- Remote placement (table height, movable later) ---
-        remote_x = tv_x + random.uniform(-0.5, 0.5)
-        remote_y = tv_y + random.uniform(0.3, 0.8)
-        remote_z = min_z + 0.8
+            # --------------------
+            # Remote (portable, bound to TV)
+            # --------------------
+            remote = RemoteProfile(
+                name=f"{self.name}:remote",
+                position=(
+                    tv_x - 1.0,
+                    tv_y + 1.0,
+                    min_z + 0.8,  # table height
+                ),
+                tv=tv,  # ✅ CRITICAL FIX
+            )
 
-        remote = RemoteProfile(
-            name=f"{self.name}:remote",
-            position=(remote_x, remote_y, remote_z),
-            tv=tv,
-        )
-
-        self.objects["tv"] = tv
-        self.objects["remote"] = remote
+            self.objects["tv"] = tv
+            self.objects["remote"] = remote
 
     # =================================================
     # Spatial helpers
@@ -114,9 +118,6 @@ class RoomProfile(WorldObject):
     # =================================================
 
     def get_sound_level(self) -> float:
-        """
-        Aggregate sound level from all objects in the room.
-        """
         total = 0.0
         for obj in self.objects.values():
             if hasattr(obj, "sound_level"):
