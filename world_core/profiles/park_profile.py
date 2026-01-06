@@ -1,55 +1,46 @@
-# world_core/profiles/park_feature_profile.py
-
 from world_core.world_object import WorldObject
 
 
-class ParkFeatureProfile(WorldObject):
+class ParkProfile(WorldObject):
     """
-    A physical feature inside a park (pond, swings, chute, etc).
+    A public park in the world.
 
-    Rules:
-    - Pure world-layer object
-    - Has real XYZ volume
-    - Used ONLY for geometric containment + semantic resolution
+    - Has real world-space volume
+    - Can later contain features (pond, swings, chute)
     """
 
     def __init__(
         self,
         name: str,
         position: tuple[float, float, float],
-        size: tuple[float, float, float],  # (width, depth, height)
-        feature_type: str,
+        size: tuple[float, float] = (200.0, 200.0),  # width, depth
+        trees: int = 20,
     ):
         super().__init__(name=name, position=position)
 
-        width, depth, height = size
+        self.size = (float(size[0]), float(size[1]))
+        self.trees = int(trees)
+
         x, y, z = self.position
 
         # -----------------------------------------
-        # World-space bounds
+        # World-space bounds (CRITICAL)
         # -----------------------------------------
         self.min_xyz = (x, y, z)
         self.max_xyz = (
-            x + float(width),
-            y + float(depth),
-            z + float(height),
+            x + self.size[0],
+            y + self.size[1],
+            z + 5.0,  # shallow vertical extent
         )
 
-        # -----------------------------------------
-        # Feature metadata
-        # -----------------------------------------
-        self.feature_type = feature_type
-        self.size = {
-            "width": float(width),
-            "depth": float(depth),
-            "height": float(height),
-        }
+        # Placeholder for future features
+        self.features = {}
 
-    # -----------------------------------------
-    # Geometry test (CRITICAL)
-    # -----------------------------------------
+    # =================================================
+    # Geometry
+    # =================================================
 
-    def contains_world_point(self, xyz: tuple[float, float, float]) -> bool:
+    def contains_world_point(self, xyz):
         x, y, z = xyz
         return (
             self.min_xyz[0] <= x <= self.max_xyz[0]
@@ -57,19 +48,23 @@ class ParkFeatureProfile(WorldObject):
             and self.min_xyz[2] <= z <= self.max_xyz[2]
         )
 
-    # -----------------------------------------
+    # =================================================
     # Observer snapshot
-    # -----------------------------------------
+    # =================================================
 
     def snapshot(self):
         base = super().snapshot()
         base.update({
-            "type": "park_feature",
-            "feature_type": self.feature_type,
-            "size": self.size,
+            "type": "park",
+            "trees": self.trees,
+            "size": list(self.size),
             "bounds": {
                 "min": self.min_xyz,
                 "max": self.max_xyz,
+            },
+            "features": {
+                name: feature.snapshot()
+                for name, feature in self.features.items()
             },
         })
         return base
