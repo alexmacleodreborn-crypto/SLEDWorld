@@ -1,5 +1,3 @@
-from .house_profile import HouseProfile
-from .room_profile import RoomProfile
-from .park_profile import ParkProfile
-from .tv_profile import TVProfile
-from .remote_profile import RemoteProfile
+# world_core/profiles/__init__.py
+
+# Intentionally minimal to avoid circular imports
