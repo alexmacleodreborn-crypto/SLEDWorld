@@ -1,9 +1,8 @@
 # world_core/bootstrap.py
 
-from world_core.world_grid import WorldGrid
 from world_core.profiles.park_profile import ParkProfile
 from world_core.profiles.house_profile import HouseProfile
-from world_core.walker_bot import WalkerBot
+
 
 
 class WorldState:
