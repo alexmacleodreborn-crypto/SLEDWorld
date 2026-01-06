@@ -3,6 +3,7 @@
 import random
 from world_core.world_object import WorldObject
 from world_core.profiles.tv_profile import TVProfile
+from world_core.profiles.remote_profile import RemoteProfile
 
 
 class RoomProfile(WorldObject):
@@ -12,7 +13,7 @@ class RoomProfile(WorldObject):
     Rules:
     - Pure world-layer object
     - Real 3D volume in WORLD coordinates
-    - Contains physical objects (TV, etc.)
+    - Contains physical objects (TV, remote, etc.)
     - No agents
     - No cognition
     - No time
@@ -68,10 +69,13 @@ class RoomProfile(WorldObject):
         """
         Populate room with physical objects.
         """
-        # Only living rooms have TVs (for now)
+        # Living room setup
         if self.room_type == "living_room":
             (min_x, min_y, min_z), (max_x, max_y, _) = self.bounds
 
+            # --------------------
+            # TV (fixed)
+            # --------------------
             tv_x = (min_x + max_x) / 2.0
             tv_y = min_y + 0.5
             tv_z = min_z + 1.0  # mounted height
@@ -81,7 +85,20 @@ class RoomProfile(WorldObject):
                 position=(tv_x, tv_y, tv_z),
             )
 
+            # --------------------
+            # Remote (portable)
+            # --------------------
+            remote = RemoteProfile(
+                name=f"{self.name}:remote",
+                position=(
+                    tv_x - 1.0,
+                    tv_y + 1.0,
+                    min_z + 0.8,  # table height
+                ),
+            )
+
             self.objects["tv"] = tv
+            self.objects["remote"] = remote
 
     # =================================================
     # Spatial helpers (CRITICAL for walkers)
