@@ -108,4 +108,54 @@ class RoomProfile(WorldObject):
         (min_x, min_y, min_z), (max_x, max_y, max_z) = self.bounds
         return (
             random.uniform(min_x, max_x),
-            random.uniform(min_y,
+            random.uniform(min_y, max_y),
+            random.uniform(min_z, max_z),
+        )
+
+    # =================================================
+    # Environmental outputs
+    # =================================================
+
+    def get_sound_level(self) -> float:
+        total = 0.0
+        for obj in self.objects.values():
+            if hasattr(obj, "sound_level"):
+                total += obj.sound_level()
+        return round(min(total, 1.0), 2)
+
+    # =================================================
+    # Interaction surface (FIXED INDENTATION)
+    # =================================================
+
+    def interact(self, object_name: str, action: str) -> bool:
+        """
+        Perform a physical interaction with an object.
+        """
+        obj = self.objects.get(object_name)
+        if obj is None:
+            return False
+
+        if hasattr(obj, action):
+            return getattr(obj, action)()
+
+        return False
+
+    # =================================================
+    # Observer snapshot
+    # =================================================
+
+    def snapshot(self):
+        base = super().snapshot()
+        base.update({
+            "type": "room",
+            "label": self.label,
+            "room_type": self.room_type,
+            "floor": self.floor,
+            "size": self.size,
+            "sound_level": self.get_sound_level(),
+            "objects": {
+                name: obj.snapshot()
+                for name, obj in self.objects.items()
+            },
+        })
+        return base
