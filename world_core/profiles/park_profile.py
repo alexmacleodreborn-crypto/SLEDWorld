@@ -1,3 +1,5 @@
+# world_core/profiles/park_profile.py
+
 from world_core.world_object import WorldObject
 
 
@@ -5,15 +7,20 @@ class ParkProfile(WorldObject):
     """
     A public park in the world.
 
-    - Has real world-space volume
-    - Can later contain features (pond, swings, chute)
+    - Pure world-layer object
+    - Volumetric (XYZ)
+    - Ground-based interaction space
+    - Can contain sub-features later (pond, swings, chute)
     """
+
+    # Interaction height (meters)
+    PARK_HEIGHT = 3.0
 
     def __init__(
         self,
         name: str,
         position: tuple[float, float, float],
-        size: tuple[float, float] = (200.0, 200.0),  # width, depth
+        size: tuple[float, float] = (200.0, 200.0),  # width, depth in meters
         trees: int = 20,
     ):
         super().__init__(name=name, position=position)
@@ -24,29 +31,21 @@ class ParkProfile(WorldObject):
         x, y, z = self.position
 
         # -----------------------------------------
-        # World-space bounds (CRITICAL)
+        # World-space bounds (AUTHORITATIVE)
         # -----------------------------------------
-        self.min_xyz = (x, y, z)
-        self.max_xyz = (
-            x + self.size[0],
-            y + self.size[1],
-            z + 5.0,  # shallow vertical extent
+        self.set_bounds(
+            min_xyz=(x, y, z),
+            max_xyz=(
+                x + self.size[0],
+                y + self.size[1],
+                z + self.PARK_HEIGHT,
+            ),
         )
 
-        # Placeholder for future features
-        self.features = {}
-
-    # =================================================
-    # Geometry
-    # =================================================
-
-    def contains_world_point(self, xyz):
-        x, y, z = xyz
-        return (
-            self.min_xyz[0] <= x <= self.max_xyz[0]
-            and self.min_xyz[1] <= y <= self.max_xyz[1]
-            and self.min_xyz[2] <= z <= self.max_xyz[2]
-        )
+        # -----------------------------------------
+        # Sub-features (added later)
+        # -----------------------------------------
+        self.features: dict[str, WorldObject] = {}
 
     # =================================================
     # Observer snapshot
@@ -58,10 +57,7 @@ class ParkProfile(WorldObject):
             "type": "park",
             "trees": self.trees,
             "size": list(self.size),
-            "bounds": {
-                "min": self.min_xyz,
-                "max": self.max_xyz,
-            },
+            "height": self.PARK_HEIGHT,
             "features": {
                 name: feature.snapshot()
                 for name, feature in self.features.items()
