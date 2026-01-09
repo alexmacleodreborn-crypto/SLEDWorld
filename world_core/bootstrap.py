@@ -2,7 +2,7 @@
 
 from world_core.world_grid import WorldGrid
 from world_core.walker_bot import WalkerBot
-from world_core.agents.observer_bot import ObserverBot
+from world_core.observer_bot import ObserverBot
 
 from world_core.profiles.park_profile import ParkProfile
 from world_core.profiles.house_profile import HouseProfile
