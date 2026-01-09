@@ -93,6 +93,32 @@ st.subheader("World Agents")
 for agent in world.agents:
     st.json(agent.snapshot())
 
+# --------------------------
+# Salience Investigator (Accounting Layer)
+# --------------------------
+st.subheader("Salience Ledger (Accounting)")
+
+investigator = world.salience_investigator
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.metric("Frames Processed", investigator.frame_counter)
+    st.metric("Total Transactions", len(investigator.ledger))
+
+with col2:
+    st.json(investigator.snapshot())
+
+# --------------------------
+# Transaction Log (Tail)
+# --------------------------
+st.subheader("Recent Salience Transactions")
+
+if investigator.ledger:
+    st.json(investigator.ledger[-10:])
+else:
+    st.write("No salience transactions recorded yet.")
+
 # ==================================================
 # Footer
 # ==================================================
