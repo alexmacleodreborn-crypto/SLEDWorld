@@ -94,28 +94,30 @@ for agent in world.agents:
 if not observer_found:
     st.warning("No observer present.")
 
-# --------------------------------------------------
-# Salience Investigator (CERTAINTY LAYER)
-# --------------------------------------------------
-st.subheader("Salience Investigator — Certainty")
+# --------------------------
+# Salience Investigator
+# --------------------------
+st.subheader("Salience Ledger (Accounting)")
 
 investigator = getattr(world, "salience_investigator", None)
 
 if investigator:
-    sigs = investigator.get_room_signatures()
-
     col1, col2 = st.columns(2)
 
     with col1:
-        st.metric("Frames Processed", investigator.frame_counter)
-        st.metric("Rooms with Certainty", len(sigs))
+        st.metric("Frames", investigator.frame_counter)
+        st.metric("Events Logged", len(investigator.ledger))
 
     with col2:
-        st.json(sigs)
+        st.json(investigator.snapshot())
 
+    st.subheader("Recent Events (Field Deltas)")
+    if investigator.ledger:
+        st.json(investigator.ledger[-12:])
+    else:
+        st.write("No events detected yet.")
 else:
     st.warning("No salience investigator present.")
-
 # --------------------------------------------------
 # Scout Perception (LEDGER-DERIVED)
 # --------------------------------------------------
