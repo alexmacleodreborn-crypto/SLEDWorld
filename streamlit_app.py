@@ -49,10 +49,13 @@ advance_steps = st.sidebar.slider(
 
 if st.sidebar.button("▶ Advance World"):
     for _ in range(advance_steps):
-        # Advance physical world
+        # 1️⃣ Advance time explicitly (minutes)
+        clock.tick(minutes=1)
+
+        # 2️⃣ Advance world physics
         world.tick()
 
-        # Let observer-type agents perceive the world
+        # 3️⃣ Allow observers to perceive
         for agent in world.agents:
             if hasattr(agent, "observe"):
                 agent.observe(world)
