@@ -1,31 +1,21 @@
+# world_core/sound/sound_source.py
+
 class SoundSource:
     """
-    Pure physical sound emitter.
-
-    - No cognition
-    - No intent
-    - Emits energy only
+    Physical sound emitter.
+    No semantics.
     """
 
-    def __init__(self, name, position, base_volume):
+    def __init__(self, name, position, base_level=1.0):
         self.name = name
-        self.position = position  # (x, y, z)
-        self.base_volume = float(base_volume)  # arbitrary units
+        self.position = position
+        self.base_level = base_level
         self.active = False
 
-    def turn_on(self):
-        self.active = True
+    def set_active(self, state: bool):
+        self.active = state
 
-    def turn_off(self):
-        self.active = False
-
-    def set_volume(self, volume):
-        self.base_volume = max(0.0, float(volume))
-
-    def snapshot(self):
-        return {
-            "name": self.name,
-            "active": self.active,
-            "base_volume": self.base_volume,
-            "position": self.position,
-        }
+    def get_level(self):
+        if not self.active:
+            return 0.0
+        return float(self.base_level)
