@@ -26,7 +26,7 @@ class WorldState:
         # Accounting / memory layer
         self.salience_investigator = SalienceInvestigatorBot()
 
-        # Active scouts
+        # Focused attention layer
         self.scouts = []
 
     # -----------------------------------------
@@ -50,7 +50,7 @@ class WorldState:
         Physics → perception → accounting.
         """
 
-        # 1️⃣ Physics & perception
+        # 1️⃣ Physical agents + observers
         for agent in self.agents:
             if hasattr(agent, "tick"):
                 agent.tick(self.clock)
@@ -58,12 +58,10 @@ class WorldState:
             if hasattr(agent, "observe"):
                 agent.observe(self)
 
-        # 2️⃣ Feed ALL snapshots into investigator
+        # 2️⃣ Feed agent snapshots into investigator
         for agent in self.agents:
             if hasattr(agent, "snapshot"):
                 snap = agent.snapshot()
-
-                # Ensure snapshot declares its source
                 if isinstance(snap, dict) and "source" in snap:
                     self.salience_investigator.ingest(snap)
 
@@ -71,10 +69,9 @@ class WorldState:
         for scout in list(self.scouts):
             scout.observe(self)
 
-            if hasattr(scout, "snapshot"):
-                snap = scout.snapshot()
-                if "source" in snap:
-                    self.salience_investigator.ingest(snap)
+            snap = scout.snapshot()
+            if isinstance(snap, dict) and "source" in snap:
+                self.salience_investigator.ingest(snap)
 
             if not scout.active:
                 self.scouts.remove(scout)
@@ -106,13 +103,13 @@ def build_world(clock):
     world.add_place(house)
 
     # -------------------------
-    # Observer
+    # Observer (perception)
     # -------------------------
     observer = ObserverBot(name="Observer-1")
     world.add_agent(observer)
 
     # -------------------------
-    # Walker
+    # Walker (physical cause)
     # -------------------------
     walker = WalkerBot(
         name="Walker-1",
@@ -120,5 +117,17 @@ def build_world(clock):
         world=world,
     )
     world.add_agent(walker)
+
+    # -------------------------
+    # Scout (focused attention)
+    # -------------------------
+    scout = ScoutBot(
+        name="Scout-1",
+        anchor_xyz=house.position,   # stake out the house
+        grid_size=16,
+        resolution=1.0,
+        max_frames=200,
+    )
+    world.scouts.append(scout)
 
     return world
