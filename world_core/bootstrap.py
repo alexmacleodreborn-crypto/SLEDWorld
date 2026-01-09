@@ -20,18 +20,14 @@ class WorldState:
     def __init__(self, clock):
         self.clock = clock
         self.grid = WorldGrid()
-
         self.places = {}
         self.agents = []
-
-        # Perception / accounting
-        self.salience_investigator = SalienceInvestigatorBot()
-
-        # Ephemeral probes
         self.scouts = []
 
+        self.salience_investigator = SalienceInvestigatorBot()
+
     # -----------------------------------------
-    # Registration
+    # REGISTRATION
     # -----------------------------------------
 
     def add_place(self, place):
@@ -45,11 +41,11 @@ class WorldState:
         self.scouts.append(scout)
 
     # -----------------------------------------
-    # WORLD TICK (single source of truth)
+    # WORLD TICK
     # -----------------------------------------
 
     def tick(self):
-        # 1️⃣ Physics + perception
+        # Physics + perception
         for agent in self.agents:
             if hasattr(agent, "tick"):
                 agent.tick(self.clock)
@@ -57,28 +53,12 @@ class WorldState:
             if hasattr(agent, "observe"):
                 agent.observe(self)
 
-        # 2️⃣ Agent snapshots → investigator
-        for agent in self.agents:
-            if hasattr(agent, "snapshot"):
-                snap = agent.snapshot()
-                if isinstance(snap, dict) and "source" in snap:
-                    self.salience_investigator.ingest(snap)
-
-        # 3️⃣ Scouts (ephemeral)
+        # Scouts observe
         for scout in list(self.scouts):
             scout.observe(self)
-
-            snap = scout.snapshot()
-            if "source" in snap:
-                self.salience_investigator.ingest(snap)
-
             if not scout.active:
                 self.scouts.remove(scout)
 
-
-# =================================================
-# WORLD CONSTRUCTION
-# =================================================
 
 def build_world(clock):
     world = WorldState(clock)
@@ -102,13 +82,13 @@ def build_world(clock):
     world.add_place(house)
 
     # -------------------------
-    # Observer (perception)
+    # Observer
     # -------------------------
     observer = ObserverBot(name="Observer-1")
     world.add_agent(observer)
 
     # -------------------------
-    # Walker (physical)
+    # Walker
     # -------------------------
     walker = WalkerBot(
         name="Walker-1",
@@ -118,13 +98,12 @@ def build_world(clock):
     world.add_agent(walker)
 
     # -------------------------
-    # Scout (sound + shape probe)
+    # Scout (LOCAL PERCEPTION)
     # -------------------------
     scout = ScoutBot(
         name="Scout-sound-211",
-        center_xyz=house.position,
         grid_size=16,
-        resolution=1.0,
+        resolution=1,
         max_frames=300,
     )
     world.add_scout(scout)
