@@ -3,24 +3,39 @@
 from __future__ import annotations
 from world_core.world_object import WorldObject
 
+
 class NeighbourhoodProfile(WorldObject):
-    def __init__(self, name, position, size_xy=(240.0, 240.0), wrap=True):
+    """
+    Top-level spatial container.
+
+    - Represents a neighbourhood / district
+    - Provides wraparound (globe / torus) boundary
+    - No semantics, no cognition
+    """
+
+    def __init__(
+        self,
+        name: str,
+        position: tuple[float, float, float],
+        size_m: float = 1000.0,
+    ):
         super().__init__(name=name, position=position)
-        self.size_xy = size_xy
-        self.wrap = wrap
 
+        self.size_m = float(size_m)
+
+        half = self.size_m / 2.0
         x, y, z = position
-        w, h = size_xy
-        self.set_bounds((x - w/2, y - h/2, z), (x + w/2, y + h/2, z + 20.0))
 
-    def center_xyz(self):
-        return self.position
+        # World-space bounds (wraparound domain)
+        self.set_bounds(
+            min_xyz=(x - half, y - half, z),
+            max_xyz=(x + half, y + half, z + 100.0),
+        )
 
     def snapshot(self):
         base = super().snapshot()
         base.update({
             "type": "neighbourhood",
-            "size_xy": self.size_xy,
-            "wrap": self.wrap,
+            "size_m": self.size_m,
         })
         return base
