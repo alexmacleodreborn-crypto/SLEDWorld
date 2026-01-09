@@ -49,13 +49,14 @@ advance_steps = st.sidebar.slider(
 
 if st.sidebar.button("▶ Advance World"):
     for _ in range(advance_steps):
-        # ------------------------------------------
-        # REALITY BRIDGE
-        # ------------------------------------------
-        # World currently advances via tick()
-        # This is treated as a meaningful change
+        # Advance physical world
         world.tick()
 
+        # Let observer-type agents perceive the world
+        for agent in world.agents:
+            if hasattr(agent, "observe"):
+                agent.observe(world)
+                
 st.sidebar.divider()
 st.sidebar.caption(
     "World advances via change, not scheduled time.\n"
