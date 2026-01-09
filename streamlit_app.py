@@ -1,4 +1,5 @@
 import streamlit as st
+import numpy as np
 
 from world_core.bootstrap import build_world
 from world_core.world_clock import WorldClock
@@ -86,9 +87,8 @@ st.json({
 st.subheader("Observer Perception")
 
 observer_found = False
-
 for agent in world.agents:
-    if hasattr(agent, "observe"):
+    if hasattr(agent, "observe") and hasattr(agent, "snapshot"):
         observer_found = True
         st.json(agent.snapshot())
 
@@ -101,13 +101,13 @@ if not observer_found:
 st.subheader("Physical Agents")
 
 for agent in world.agents:
-    if hasattr(agent, "tick") and not hasattr(agent, "observe"):
+    if hasattr(agent, "tick") and hasattr(agent, "snapshot") and not hasattr(agent, "observe"):
         st.json(agent.snapshot())
 
 # --------------------------
-# Active Scouts (Focused Attention)
+# Active Scouts
 # --------------------------
-st.subheader("Active Scouts")
+st.subheader("Active Scouts (Focused Attention)")
 
 scouts = getattr(world, "scouts", [])
 
@@ -118,9 +118,65 @@ else:
     st.write("No active scouts.")
 
 # --------------------------
-# Salience Investigator (Accounting Layer)
+# Scout Perception — Square View
 # --------------------------
-st.subheader("Salience Investigator")
+st.subheader("Scout Perception — Local Squares")
+
+if not scouts:
+    st.write("No active scouts to visualise.")
+else:
+    for scout in scouts:
+        st.markdown(f"### {scout.name} — frame {scout.frame}")
+
+        if not hasattr(scout, "sketches") or not scout.sketches:
+            st.write("No sketches yet.")
+            continue
+
+        latest = scout.sketches[-1]
+
+        colA, colB, colC = st.columns(3)
+
+        with colA:
+            st.caption("Occupancy (Shape / Outline)")
+            st.image(
+                np.array(latest["occupancy"]),
+                clamp=True,
+                use_column_width=True,
+            )
+
+        with colB:
+            st.caption("Depth (Distance)")
+            st.image(
+                np.array(latest["depth"]),
+                clamp=True,
+                use_column_width=True,
+            )
+
+        with colC:
+            st.caption("Sound Intensity")
+            st.image(
+                np.array(latest["sound"]),
+                clamp=True,
+                use_column_width=True,
+            )
+
+        # --------------------------
+        # Shape persistence metric
+        # --------------------------
+        if hasattr(scout, "compute_persistence"):
+            persistence = scout.compute_persistence()
+            if persistence is not None:
+                st.metric(
+                    "Shape Persistence (IoU)",
+                    f"{persistence:.3f}"
+                )
+            else:
+                st.write("Shape persistence: insufficient frames")
+
+# --------------------------
+# Salience Investigator
+# --------------------------
+st.subheader("Salience Investigator (Accounting Layer)")
 
 investigator = getattr(world, "salience_investigator", None)
 
@@ -138,9 +194,9 @@ with col2:
     st.json(investigator.snapshot())
 
 # --------------------------
-# Salience Ledger (Tail)
+# Salience Ledger (Recent)
 # --------------------------
-st.subheader("Salience Ledger (Recent)")
+st.subheader("Salience Ledger (Recent Entries)")
 
 if investigator.ledger:
     st.json(investigator.ledger[-10:])
@@ -155,6 +211,6 @@ st.caption(
     "Walkers cause change · "
     "Observers perceive · "
     "Scouts focus attention · "
-    "Salience is accounted · "
+    "Shape precedes name · "
     "Time is a coordinate, not a driver"
 )
