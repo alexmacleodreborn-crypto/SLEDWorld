@@ -7,84 +7,79 @@ from world_core.world_clock import WorldClock
 # Streamlit config
 # ==================================================
 st.set_page_config(
-    page_title="SLED World – World Frame",
+    page_title="SLEDWorld – Reality Frame",
     layout="wide"
 )
 
 # ==================================================
-# Session initialisation (ORDER MATTERS)
+# Session initialisation
 # ==================================================
 if "clock" not in st.session_state:
-    # acceleration = WORLD seconds per REAL second
-    st.session_state.clock = WorldClock(acceleration=60)
+    # Clock is now observational, not causal
+    st.session_state.clock = WorldClock(acceleration=1)
 
 clock = st.session_state.clock
 
 if "world" not in st.session_state:
-    # ✅ FIX: pass clock into build_world
     st.session_state.world = build_world(clock)
 
 world = st.session_state.world
 
 # ==================================================
-# Sidebar – World Clock Controls
+# Sidebar – World Advancement
 # ==================================================
-st.sidebar.header("World Clock Controls")
+st.sidebar.header("World Advancement")
 
-accel = st.sidebar.slider(
-    "Acceleration (world seconds per real second)",
-    min_value=1,
-    max_value=3600,
-    value=int(clock.acceleration),
-)
-clock.acceleration = accel
-
-step_minutes = st.sidebar.selectbox(
-    "Step size (minutes)",
-    [1, 5, 15, 30, 60, 180, 720, 1440],
-    index=2
+advance_reason = st.sidebar.selectbox(
+    "Advance reason",
+    [
+        "structural_change",
+        "agent_interaction",
+        "external_event",
+        "observation_only",
+    ]
 )
 
-colA, colB = st.sidebar.columns(2)
+advance_steps = st.sidebar.slider(
+    "Advance intensity",
+    1, 5, 1
+)
 
-with colA:
-    if st.button("Tick +1 step"):
-        clock.tick(minutes=step_minutes)
-        world.tick()
+if st.sidebar.button("▶ Advance World"):
+    for _ in range(advance_steps):
+        # World decides what changes
+        changed = world.advance(reason=advance_reason)
 
-with colB:
-    if st.button("Tick +10 steps"):
-        clock.tick(minutes=step_minutes * 10)
-        world.tick()
+        # Only tick clock if something actually changed
+        if changed:
+            clock.annotate(event=advance_reason)
 
 st.sidebar.divider()
 
-real_seconds = st.sidebar.slider(
-    "Auto step (real seconds)",
-    min_value=0.0,
-    max_value=5.0,
-    value=0.0,
-    step=0.1
+st.sidebar.caption(
+    "World advances only when change occurs.\n"
+    "Time is recorded, not enforced."
 )
-
-if real_seconds > 0:
-    clock.tick(real_seconds=real_seconds)
-    world.tick()
 
 # ==================================================
 # Main Display
 # ==================================================
-st.title("SLED World – World Frame")
+st.title("SLEDWorld – Reality Frame")
 
 # --------------------------
-# World Time
+# World State (Primary)
 # --------------------------
-st.subheader("World Time")
+st.subheader("World State")
+st.json(world.snapshot())
+
+# --------------------------
+# World Time (Secondary)
+# --------------------------
+st.subheader("World Time (Derived)")
 st.json(clock.snapshot())
 
 st.caption(
-    f"World clock running at {clock.acceleration}× real time · "
-    f"Step size: {step_minutes} minutes"
+    "World time is a record of change, not a driver."
 )
 
 # --------------------------
@@ -113,7 +108,7 @@ for name, place in world.places.items():
         st.json(place.snapshot())
 
 # --------------------------
-# World Agents (NOW LIVE)
+# World Agents
 # --------------------------
 st.subheader("World Agents")
 
@@ -128,5 +123,5 @@ else:
 # ==================================================
 st.caption(
     "This view represents the objective world frame. "
-    "Agents move according to world time, not perception."
+    "Reality progresses via change, not scheduled time."
 )
