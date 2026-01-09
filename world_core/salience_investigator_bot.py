@@ -1,139 +1,63 @@
 # world_core/salience_investigator_bot.py
 
-from collections import defaultdict
-from typing import Dict, List, Any
-
-
 class SalienceInvestigatorBot:
     """
-    Salience Investigator (Accounting Layer)
-
-    Role:
-    - Receives observer reports
-    - Converts observations into transaction records
-    - Accumulates structural salience
-    - NO cognition
-    - NO decisions
-    - NO feedback into world
-
-    This bot builds the *infrastructure of mind*,
-    not thoughts themselves.
+    Accounting layer.
+    No cognition. No action.
+    Builds structured memory.
     """
 
-    def __init__(self, name: str = "Salience-Investigator"):
-        self.name = name
-
-        # -------------------------------------------------
-        # Transaction ledger (append-only)
-        # -------------------------------------------------
-        self.ledger: List[Dict[str, Any]] = []
-
-        # -------------------------------------------------
-        # Structural accumulation indexes
-        # -------------------------------------------------
-        self.entity_exposure = defaultdict(int)
-        self.place_exposure = defaultdict(int)
+    def __init__(self):
         self.frame_counter = 0
+        self.ledger = []
+        self.patterns = {}
 
-    # =================================================
-    # INGESTION (Observer → Investigator)
-    # =================================================
-
-    def ingest_observer_snapshot(self, snapshot: Dict[str, Any]):
-        """
-        Receives a snapshot from ObserverBot.
-        Converts perception into transactions.
-        """
-
+    # -------------------------------------------------
+    # INGEST FROM OBSERVER
+    # -------------------------------------------------
+    def ingest_observer_snapshot(self, snapshot):
         self.frame_counter += 1
 
-        observer_name = snapshot.get("name", "unknown_observer")
+        entry = {
+            "frame": self.frame_counter,
+            "source": "observer",
+            "data": snapshot,
+        }
+        self.ledger.append(entry)
 
-        # -------------------------
-        # Seen places
-        # -------------------------
-        seen_places = snapshot.get("seen_places", {})
+        self._accumulate_patterns(snapshot)
 
-        for place_name, count in seen_places.items():
-            transaction = self._build_transaction(
-                entity_type="place",
-                entity_name=place_name,
-                exposure=count,
-                observer=observer_name,
+    # -------------------------------------------------
+    # INGEST FROM WALKER
+    # -------------------------------------------------
+    def ingest_physical_event(self, event):
+        entry = {
+            "frame": self.frame_counter,
+            "source": "walker",
+            "data": event,
+        }
+        self.ledger.append(entry)
+
+        if event.get("sound_emitted", 0) > 0:
+            self.patterns["sound_emission"] = (
+                self.patterns.get("sound_emission", 0) + 1
             )
 
-            self.ledger.append(transaction)
-            self.place_exposure[place_name] += 1
+    # -------------------------------------------------
+    # PATTERN ACCUMULATION (NO INTERPRETATION)
+    # -------------------------------------------------
+    def _accumulate_patterns(self, snapshot):
+        if snapshot.get("heard_sound_events", 0) > 0:
+            self.patterns["heard_sound"] = (
+                self.patterns.get("heard_sound", 0) + 1
+            )
 
-    # =================================================
-    # TRANSACTION BUILDER
-    # =================================================
-
-    def _build_transaction(
-        self,
-        entity_type: str,
-        entity_name: str,
-        exposure: int,
-        observer: str,
-    ) -> Dict[str, Any]:
-        """
-        Constructs a single salience transaction.
-        """
-
-        tags = self._derive_tags(entity_type, exposure)
-
+    # -------------------------------------------------
+    # SNAPSHOT (UI)
+    # -------------------------------------------------
+    def snapshot(self):
         return {
-            "frame": self.frame_counter,          # coordinate, not time
-            "observer": observer,
-
-            "entity": {
-                "type": entity_type,
-                "name": entity_name,
-            },
-
-            "metrics": {
-                "exposure": exposure,
-            },
-
-            "tags": tags,
-        }
-
-    # =================================================
-    # TAG DERIVATION (NON-COGNITIVE)
-    # =================================================
-
-    def _derive_tags(self, entity_type: str, exposure: int) -> List[str]:
-        """
-        Assigns structural tags only.
-        No meaning. No interpretation.
-        """
-
-        tags = [entity_type]
-
-        if exposure > 5:
-            tags.append("recurrent")
-        else:
-            tags.append("rare")
-
-        if entity_type == "place":
-            tags.append("spatial")
-            tags.append("static")
-
-        return tags
-
-    # =================================================
-    # OBSERVER VIEW
-    # =================================================
-
-    def snapshot(self) -> Dict[str, Any]:
-        """
-        Observer-safe snapshot.
-        No internal reasoning exposed.
-        """
-
-        return {
-            "name": self.name,
             "frames_processed": self.frame_counter,
-            "total_transactions": len(self.ledger),
-            "known_places": dict(self.place_exposure),
+            "total_records": len(self.ledger),
+            "patterns": dict(self.patterns),
         }
