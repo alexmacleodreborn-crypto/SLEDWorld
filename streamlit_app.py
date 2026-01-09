@@ -47,8 +47,8 @@ advance_steps = st.sidebar.slider(
 
 if st.sidebar.button("▶ Advance World"):
     for _ in range(advance_steps):
-        # World decides what changes
-        changed = world.advance(reason=advance_reason)
+        world.tick()
+        clock.annotate(event=advance_reason)
 
         # Only tick clock if something actually changed
         if changed:
