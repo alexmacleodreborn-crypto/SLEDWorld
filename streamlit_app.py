@@ -1,5 +1,3 @@
-# streamlit_app.py
-
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
@@ -7,14 +5,11 @@ import matplotlib.pyplot as plt
 from world_core.bootstrap import build_world
 from world_core.world_clock import WorldClock
 
+st.set_page_config(page_title="SLEDWorld – Reality Frame", layout="wide")
 
-st.set_page_config(page_title="SLEDWorld – Pattern → Symbols → Language", layout="wide")
-st.title("SLEDWorld – Pattern → Symbols → Language")
-st.caption("World → Surveyor (surfaces) → Ledger (promotion) → Architect/Builder (structure) → Language (tokens)")
-
-# ----------------------------
+# -----------------------
 # Session init
-# ----------------------------
+# -----------------------
 if "clock" not in st.session_state:
     st.session_state.clock = WorldClock(acceleration=1)
 
@@ -24,188 +19,165 @@ if "world" not in st.session_state:
 clock = st.session_state.clock
 world = st.session_state.world
 
-# ----------------------------
-# Sidebar controls
-# ----------------------------
-st.sidebar.header("Advance")
-steps = st.sidebar.slider("Steps", 1, 80, 10)
-if st.sidebar.button("▶ Advance World"):
-    for _ in range(steps):
-        clock.tick(minutes=1)
+# -----------------------
+# Sidebar
+# -----------------------
+st.sidebar.header("World Control")
+
+advance_steps = st.sidebar.slider("Advance steps", 1, 50, 5)
+minutes_per_step = st.sidebar.slider("Minutes per step", 1, 30, 1)
+
+auto = st.sidebar.checkbox("Auto-run", value=False)
+auto_delay = st.sidebar.slider("Auto delay (sec)", 0.1, 2.0, 0.3, 0.1)
+
+if st.sidebar.button("▶ Advance"):
+    for _ in range(advance_steps):
+        clock.tick(minutes=minutes_per_step)
         world.tick()
 
-st.sidebar.divider()
 if st.sidebar.button("Reset World"):
     st.session_state.pop("world", None)
     st.session_state.pop("clock", None)
     st.rerun()
 
-# ----------------------------
-# World summary
-# ----------------------------
-st.subheader("World Summary")
-st.json({
-    "world_frame": world.frame,
-    "num_places": len(world.places),
-    "num_agents": len(world.agents),
-    "num_scouts": len(world.scouts),
-    "has_surveyor": world.surveyor is not None,
-})
+if auto:
+    # light auto loop: reruns page; state persists in session_state
+    clock.tick(minutes=minutes_per_step)
+    world.tick()
+    st.sidebar.caption("Auto running… (state persists)")
+    st.sidebar.write("")
+    st.rerun()
 
-# ----------------------------
-# World geometry (places/rooms/objects)
-# ----------------------------
-st.subheader("World Geometry & Objects")
+# -----------------------
+# Main
+# -----------------------
+st.title("SLEDWorld – Reality Frame")
+st.caption("World Genesis Stack • Structure → Signals → Ledger → Symbols (No minds yet)")
+
+colA, colB = st.columns([1, 1])
+
+with colA:
+    st.subheader("Clock")
+    st.json(clock.snapshot())
+
+with colB:
+    st.subheader("World Summary")
+    st.json({
+        "frame": getattr(world, "frame", None),
+        "num_places": len(world.places),
+        "place_names": list(world.places.keys()),
+        "num_agents": len(world.agents),
+        "num_scouts": len(world.scouts),
+    })
+
+# -----------------------
+# Places / Rooms / Objects
+# -----------------------
+st.subheader("Places, Rooms, Objects")
+
 for place in world.places.values():
     with st.expander(f"Place: {place.name}", expanded=False):
-        st.json({
-            "position": getattr(place, "position", None),
-            "bounds": getattr(place, "bounds", None),
-        })
+        st.json(place.snapshot())
 
         if hasattr(place, "rooms"):
             for room in place.rooms.values():
-                rs = room.snapshot()
-                with st.expander(f"Room: {room.name} ({rs.get('room_type')})", expanded=False):
-                    st.json({
-                        "bounds": rs.get("bounds"),
-                        "signals": rs.get("signals"),
-                        "objects": rs.get("objects", {}),
-                    })
+                with st.expander(f"Room: {room.name}", expanded=False):
+                    st.json(room.snapshot())
 
-# ----------------------------
-# Agents
-# ----------------------------
-st.subheader("Agents")
-for a in world.agents:
-    if hasattr(a, "snapshot"):
-        st.json(a.snapshot())
+# -----------------------
+# Bots
+# -----------------------
+st.subheader("Bots")
 
-# ----------------------------
-# Scouts
-# ----------------------------
-st.subheader("Scouts (local shape/sound/light)")
-show_occ = st.toggle("Show Occupancy", value=True)
-show_sound = st.toggle("Show Sound", value=True)
-show_light = st.toggle("Show Light", value=True)
+c1, c2, c3 = st.columns(3)
 
-for s in world.scouts:
-    snap = s.snapshot()
-    with st.expander(f"{snap.get('name')} · frame {snap.get('frame')} · area {snap.get('area')}", expanded=False):
-        st.json(snap)
+with c1:
+    st.markdown("### Walker")
+    w = world.get_agent("WalkerBot")
+    st.json(w.snapshot() if w else {"missing": "WalkerBot"})
 
-        cols = st.columns(3)
-        if show_occ:
-            with cols[0]:
-                fig, ax = plt.subplots()
-                ax.imshow(s.occupancy, cmap="gray")
-                ax.set_title("Occupancy")
-                ax.axis("off")
-                st.pyplot(fig)
+with c2:
+    st.markdown("### Observer")
+    o = world.get_agent("ObserverBot")
+    st.json(o.snapshot() if o else {"missing": "ObserverBot"})
 
-        if show_sound:
-            with cols[1]:
-                fig, ax = plt.subplots()
-                ax.imshow(s.sound, cmap="viridis")
-                ax.set_title("Sound field")
-                ax.axis("off")
-                st.pyplot(fig)
-
-        if show_light:
-            with cols[2]:
-                fig, ax = plt.subplots()
-                ax.imshow(s.light, cmap="inferno")
-                ax.set_title("Light field")
-                ax.axis("off")
-                st.pyplot(fig)
-
-# ----------------------------
-# Surveyor visuals (safe projections)
-# ----------------------------
-st.subheader("Surveyor – Surface Projections")
-if world.surveyor is None:
-    st.warning("No surveyor present.")
-else:
-    ss = world.surveyor.snapshot()
-    surf = ss.get("surface_volume", None)
-    vol = ss.get("volume", None)
-
-    if surf is None or vol is None:
-        st.info("Advance world to generate surveyor volume.")
-    else:
-        surf_np = np.array(surf, dtype=np.uint8)  # z,y,x
-        vol_np = np.array(vol, dtype=np.uint8)
-
-        # Top-down projection: max across z
-        top = surf_np.max(axis=0)
-
-        # Choose 3 z-slices (floor-ish, mid, high)
-        nz = surf_np.shape[0]
-        z_idxs = [
-            min(nz-1, max(0, nz//6)),
-            min(nz-1, max(0, nz//2)),
-            min(nz-1, max(0, (5*nz)//6)),
-        ]
-
-        colA, colB = st.columns([1.2, 1.0])
-
-        with colA:
-            st.caption("Top-down surface map")
-            fig, ax = plt.subplots()
-            ax.imshow(top, cmap="gray")
-            ax.axis("off")
-            st.pyplot(fig)
-
-        with colB:
-            st.caption(f"Surveyor geometry summary (planes)")
-            st.json(world.ledger.geom)
-
-        st.caption("Z-slices (surfaces)")
-        c1, c2, c3 = st.columns(3)
-        for col, zi in zip([c1, c2, c3], z_idxs):
-            with col:
-                fig, ax = plt.subplots()
-                ax.imshow(surf_np[zi], cmap="gray")
-                ax.set_title(f"z slice {zi}")
-                ax.axis("off")
-                st.pyplot(fig)
-
-# ----------------------------
-# Ledger promotions
-# ----------------------------
-st.subheader("Ledger (Promotion Engine)")
-ledger_snap = world.ledger.snapshot()
-
-col1, col2 = st.columns(2)
-with col1:
-    st.metric("Frames", ledger_snap.get("frame", 0))
-    st.metric("Entries", ledger_snap.get("total_entries", 0))
-    st.metric("Transitions", ledger_snap.get("total_transitions", 0))
-
-with col2:
+with c3:
+    st.markdown("### Surveyor")
+    s = world.surveyor
     st.json({
-        "symbols": ledger_snap.get("symbols", {}).get("types", {}),
-        "geom_planes": ledger_snap.get("geom", {}).get("planes", {}),
+        "name": s.name,
+        "frame": s.frames,
+        "active": s.active,
+        "center_xyz": s.center_xyz,
+        "resolution_m": s.resolution_m,
+        "volume_shape": s.last_snapshot.get("volume_shape") if s.last_snapshot else None,
     })
 
-st.subheader("Transitions (tail)")
-st.json(ledger_snap.get("transitions_tail", []))
+# -----------------------
+# Aerial 2D (1/0)
+# -----------------------
+st.subheader("Aerial Occupancy (1=solid column, 0=empty)")
 
-# ----------------------------
-# Architect / Builder
-# ----------------------------
-st.subheader("Architect + Builder")
-st.json(world.architect.snapshot())
-st.json(world.builder.snapshot())
+surv_snap = world.surveyor.snapshot()
+aerial = None
+if isinstance(surv_snap, dict):
+    aerial = surv_snap.get("aerial_grid")
 
-# ----------------------------
-# Language (tokens)
-# ----------------------------
-st.subheader("Language (tokens emerge after symbols)")
-lang = world.language.snapshot()
-st.json({
-    "lexicon": lang.get("lexicon", {}),
-    "utterances_tail": lang.get("utterances_tail", []),
-})
+if aerial is None:
+    st.warning("No aerial grid yet (advance a few frames).")
+else:
+    arr = np.array(aerial, dtype=float)
+    fig, ax = plt.subplots()
+    ax.imshow(arr, interpolation="nearest")
+    ax.set_title("Top-down occupancy")
+    ax.axis("off")
+    st.pyplot(fig)
 
-st.caption("Advance 30–90 steps: Walker toggles TV periodically → light/sound transitions → TV symbol → language tokens (TV ON/OFF, RED/GREEN).")
+# -----------------------
+# Scouts
+# -----------------------
+st.subheader("Scouts")
+
+if world.scouts:
+    for scout in world.scouts:
+        snap = scout.snapshot()
+        with st.expander(f"{snap.get('name','scout')} · {snap.get('signal')} · frame {snap.get('frame')}", expanded=False):
+            st.json({k: v for k, v in snap.items() if k not in ("grid",)})
+            grid = snap.get("grid")
+            if grid is not None:
+                arr = np.array(grid, dtype=float)
+                fig, ax = plt.subplots()
+                ax.imshow(arr, interpolation="nearest")
+                ax.axis("off")
+                st.pyplot(fig)
+else:
+    st.write("No active scouts (ledger will deploy them on detected changes).")
+
+# -----------------------
+# Ledger / Promotions / Language
+# -----------------------
+st.subheader("Ledger (Truth)")
+
+ledger = world.ledger
+left, right = st.columns([1, 1])
+
+with left:
+    st.metric("Frames Processed", ledger.frame_counter)
+    st.metric("Transactions", len(ledger.ledger))
+    st.metric("Symbols", len(ledger.symbols))
+    st.metric("Lexicon", len(world.language.lexicon))
+
+with right:
+    st.json(ledger.snapshot())
+
+st.markdown("### Recent Transactions (tail)")
+tail = ledger.ledger[-15:] if ledger.ledger else []
+st.json(tail if tail else {"empty": True})
+
+st.markdown("### Symbols (current)")
+st.json(ledger.symbols)
+
+st.markdown("### Language (grounded words)")
+st.json(world.language.snapshot())
+
+st.caption("Reality exists first • Bots compile structure • Ledger promotes symbols • Words bind only after grounding")
