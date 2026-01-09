@@ -1,118 +1,133 @@
 # world_core/observer_bot.py
 
-from dataclasses import dataclass, field
-from typing import Dict, Any, List
+import math
 
 
-@dataclass
 class ObserverBot:
     """
-    Passive perception.
-    Reports fields (sound/light) and stable object snapshots.
-    No semantics required.
+    Passive perception bot.
+    No physics. No interaction.
+    It "observes" the world each frame and reports signals.
+
+    Strategy:
+      - Anchor perception around Walker position (if present)
+      - Resolve room/place from that position
+      - Read room signals (light + sound) and report them
     """
 
-    name: str = "Observer-1"
-    frames_observed: int = 0
-    last_snapshot: Dict[str, Any] = field(default_factory=dict)
+    def __init__(self, name: str = "Observer-1"):
+        self.name = name
+        self.frames_observed = 0
+
+        self.current_area = "world"
+        self.current_bounds = None
+
+        self.heard_sound_level = 0.0
+        self.seen_light = {"intensity": 0.0, "color": "none"}
+
+        self.seen_places = {}
+        self.ledger = []
+
+    def _distance(self, a, b):
+        return math.sqrt((a[0]-b[0])**2 + (a[1]-b[1])**2 + (a[2]-b[2])**2)
 
     def observe(self, world):
         self.frames_observed += 1
-        frame = int(getattr(getattr(world, "space", None), "frame_counter", self.frames_observed))
 
-        # Global fields
-        space = getattr(world, "space", None)
-        space_snap = space.snapshot() if space and hasattr(space, "snapshot") else None
+        walker_pos = None
+        for a in getattr(world, "agents", []):
+            if a.__class__.__name__ == "WalkerBot":
+                walker_pos = tuple(getattr(a, "position", (0.0, 0.0, 0.0)))
+                break
 
-        # Field events discovered in rooms/objects
-        fields: List[dict] = []
-        objects: List[dict] = []
+        # Fallback: observer just "sees" all places
+        places = getattr(world, "places", {}) or {}
+        for pname in places.keys():
+            self.seen_places[pname] = self.seen_places.get(pname, 0) + 1
 
-        for place in world.places.values():
-            if not hasattr(place, "rooms"):
-                continue
+        self.current_area = "world"
+        self.current_bounds = None
+        self.heard_sound_level = 0.0
+        self.seen_light = {"intensity": 0.0, "color": "none"}
 
-            for room in place.rooms.values():
-                # Room-level fields
-                if hasattr(room, "get_sound_level"):
-                    try:
-                        fields.append({
-                            "type": "sound",
-                            "scope": "room",
-                            "room": room.name,
-                            "level": float(room.get_sound_level()),
+        # If we have walker position, resolve current room/place and read signals
+        if walker_pos is not None:
+            # Try rooms first
+            for place in places.values():
+                rooms = getattr(place, "rooms", None)
+                if not rooms:
+                    continue
+                for room in rooms.values():
+                    if hasattr(room, "contains_world_point") and room.contains_world_point(walker_pos):
+                        self.current_area = getattr(room, "name", "room")
+                        self.current_bounds = getattr(room, "bounds", None)
+
+                        rs = room.snapshot()
+                        sig = rs.get("signals", {})
+                        self.heard_sound_level = float(sig.get("sound", 0.0) or 0.0)
+                        self.seen_light = sig.get("light") or {"intensity": 0.0, "color": "none"}
+
+                        self.ledger.append({
+                            "frame": self.frames_observed,
+                            "event": "observe_room",
+                            "area": self.current_area,
+                            "sound": round(self.heard_sound_level, 3),
+                            "light": self.seen_light,
                         })
-                    except Exception:
-                        pass
+                        return
 
-                if hasattr(room, "get_light_level"):
-                    try:
-                        lo = room.get_light_level()
-                        fields.append({
-                            "type": "light",
-                            "scope": "room",
-                            "room": room.name,
-                            "intensity": float(lo.get("intensity", 0.0)),
-                            "color": lo.get("color", "none"),
-                        })
-                    except Exception:
-                        pass
+            # Else resolve place
+            for place in places.values():
+                if hasattr(place, "contains_world_point") and place.contains_world_point(walker_pos):
+                    self.current_area = getattr(place, "name", "place")
+                    self.current_bounds = getattr(place, "bounds", None)
 
-                # Object snapshots
-                objs = getattr(room, "objects", {})
-                for obj_name, obj in objs.items():
-                    if hasattr(obj, "snapshot"):
-                        snap = obj.snapshot()
-                    else:
-                        snap = {"name": obj_name, "repr": str(obj)}
+                    # Place signal fallback: compute from rooms if any
+                    sound = 0.0
+                    best_light = {"intensity": 0.0, "color": "none"}
+                    rooms = getattr(place, "rooms", None)
+                    if rooms:
+                        for room in rooms.values():
+                            rs = room.snapshot()
+                            sig = rs.get("signals", {})
+                            sound += float(sig.get("sound", 0.0) or 0.0)
+                            lt = sig.get("light") or {"intensity": 0.0, "color": "none"}
+                            if float(lt.get("intensity", 0.0) or 0.0) > float(best_light.get("intensity", 0.0) or 0.0):
+                                best_light = lt
 
-                    # Add light/sound fields if present
-                    if hasattr(obj, "get_light_output"):
-                        try:
-                            ls = obj.get_light_output()
-                            fields.append({
-                                "type": "light",
-                                "scope": "object",
-                                "room": room.name,
-                                "object": obj_name,
-                                "intensity": float(ls.get("intensity", 0.0)),
-                                "color": ls.get("color", "none"),
-                            })
-                        except Exception:
-                            pass
+                    self.heard_sound_level = min(sound, 1.0)
+                    self.seen_light = best_light
 
-                    if hasattr(obj, "get_sound_level"):
-                        try:
-                            fields.append({
-                                "type": "sound",
-                                "scope": "object",
-                                "room": room.name,
-                                "object": obj_name,
-                                "level": float(obj.get_sound_level()),
-                            })
-                        except Exception:
-                            pass
-
-                    objects.append({
-                        "room": room.name,
-                        "object": obj_name,
-                        "snapshot": snap,
+                    self.ledger.append({
+                        "frame": self.frames_observed,
+                        "event": "observe_place",
+                        "area": self.current_area,
+                        "sound": round(self.heard_sound_level, 3),
+                        "light": self.seen_light,
                     })
+                    return
 
-        self.last_snapshot = {
-            "source": "observer",
-            "name": self.name,
-            "frame": frame,
-            "world_space": space_snap,
-            "fields": fields[:200],
-            "objects": objects[:200],
-        }
+        # Global fallback
+        self.ledger.append({
+            "frame": self.frames_observed,
+            "event": "observe_world",
+            "area": self.current_area,
+            "sound": 0.0,
+            "light": {"intensity": 0.0, "color": "none"},
+        })
 
-    def snapshot(self) -> Dict[str, Any]:
-        return self.last_snapshot or {
+    def snapshot(self):
+        return {
             "source": "observer",
+            "type": "observer",
             "name": self.name,
             "frame": self.frames_observed,
-            "fields": [],
-            "objects": [],
+            "current_area": self.current_area,
+            "bounds": self.current_bounds,
+            "signals": {
+                "sound": round(self.heard_sound_level, 3),
+                "light": self.seen_light,
+            },
+            "seen_places": dict(self.seen_places),
+            "ledger_tail": self.ledger[-10:],
         }
