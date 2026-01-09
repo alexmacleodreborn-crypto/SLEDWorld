@@ -1,4 +1,6 @@
 import streamlit as st
+import numpy as np
+import matplotlib.pyplot as plt
 
 from world_core.bootstrap import build_world
 from world_core.world_clock import WorldClock
@@ -60,6 +62,7 @@ st.json({
     "places": list(world.places.keys()),
     "num_places": len(world.places),
     "num_agents": len(world.agents),
+    "num_scouts": len(getattr(world, "scouts", [])),
 })
 
 # --------------------------
@@ -137,11 +140,74 @@ else:
     st.warning("No salience investigator present.")
 
 # ==================================================
+# Scout Visual Perception (NEW – THIS IS THE KEY PART)
+# ==================================================
+st.divider()
+st.subheader("Scout Perception — Shape & Sound")
+
+scouts = getattr(world, "scouts", [])
+
+if not scouts:
+    st.write("No active scouts.")
+else:
+    for scout in scouts:
+        snap = scout.snapshot()
+
+        st.markdown(f"### {scout.name}")
+        st.caption(
+            f"Frame {snap['frame']} · "
+            f"Active: {snap['active']} · "
+            f"Persistence: {snap['shape_persistence']}"
+        )
+
+        colA, colB, colC = st.columns(3)
+
+        # ------------------
+        # Shape (Occupancy)
+        # ------------------
+        with colA:
+            st.markdown("**Shape (Occupancy)**")
+            fig, ax = plt.subplots()
+            ax.imshow(
+                scout.occupancy,
+                cmap="gray",
+                origin="lower"
+            )
+            ax.set_title("Occupied Space")
+            ax.axis("off")
+            st.pyplot(fig)
+
+        # ------------------
+        # Sound Field
+        # ------------------
+        with colB:
+            st.markdown("**Sound Field**")
+            fig, ax = plt.subplots()
+            ax.imshow(
+                scout.sound,
+                cmap="inferno",
+                origin="lower"
+            )
+            ax.set_title("Sound Intensity")
+            ax.axis("off")
+            st.pyplot(fig)
+
+        # ------------------
+        # Metrics
+        # ------------------
+        with colC:
+            st.metric("Shape Persistence", snap["shape_persistence"])
+            st.metric("Occupied Cells", snap["occupancy_sum"])
+            st.metric("Sound Energy", snap["sound_sum"])
+
+        st.divider()
+
+# ==================================================
 # Footer
 # ==================================================
 st.caption(
     "Reality exists first. "
-    "Motion causes change. "
-    "Observers perceive. "
-    "Meaning emerges."
+    "Structure precedes meaning. "
+    "Change binds to shape. "
+    "Understanding emerges."
 )
