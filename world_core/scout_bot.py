@@ -1,38 +1,25 @@
 # world_core/scout_bot.py
 
-import math
 import numpy as np
 
 
 class ScoutBot:
     """
-    Ephemeral perception probe.
-
-    Purpose:
-    - Stake out a region of space
-    - Record local shape (occupancy)
-    - Record sound/light intensity as fields
-    - NO movement
-    - NO cognition
-    - NO decisions
-
-    Scouts exist for a fixed number of frames,
-    then terminate.
+    Scout Bot
+    ----------
+    Passive perceptual probe.
+    Records local spatial fields (shape, sound, light).
+    No cognition. No labels. No learning.
     """
 
     def __init__(
         self,
         name: str,
-        center_xyz: tuple[float, float, float],
         grid_size: int = 16,
         resolution: float = 1.0,
         max_frames: int = 300,
     ):
         self.name = name
-        self.type = "scout"
-
-        self.center_xyz = np.array(center_xyz, dtype=float)
-
         self.grid_size = grid_size
         self.resolution = resolution
         self.max_frames = max_frames
@@ -40,120 +27,123 @@ class ScoutBot:
         self.frame = 0
         self.active = True
 
-        # ---------------------------------
-        # Perception grids
-        # ---------------------------------
+        # Spatial fields
         self.occupancy = np.zeros((grid_size, grid_size))
         self.sound = np.zeros((grid_size, grid_size))
+        self.light = np.zeros((grid_size, grid_size))
 
-        # Persistence metric (very early objectness)
+        # Persistence counters
         self.shape_persistence = 0
+        self.last_occupancy = None
 
-    # =================================================
-    # OBSERVE WORLD
-    # =================================================
+    # ==================================================
+    # CORE OBSERVATION
+    # ==================================================
 
     def observe(self, world):
         if not self.active:
             return
 
         self.frame += 1
-
-        self._sense_geometry(world)
-        self._sense_sound(world)
-
-        if self.frame >= self.max_frames:
+        if self.frame > self.max_frames:
             self.active = False
+            return
 
-    # =================================================
-    # GEOMETRY / SHAPE
-    # =================================================
+        # Reset fields
+        self.occupancy[:] = 0
+        self.sound[:] = 0
+        self.light[:] = 0
 
-    def _sense_geometry(self, world):
-        """
-        Marks occupied cells based on world places.
-        """
-        cx, cy, _ = self.center_xyz
-
-        half = self.grid_size // 2
-
-        new_occ = np.zeros_like(self.occupancy)
-
-        for i in range(self.grid_size):
-            for j in range(self.grid_size):
-                wx = cx + (i - half) * self.resolution
-                wy = cy + (j - half) * self.resolution
-                wz = 0.0
-
-                for place in world.places.values():
-                    if place.contains_world_point((wx, wy, wz)):
-                        new_occ[i, j] = 1.0
-                        break
-
-        # Simple persistence metric
-        if np.array_equal(new_occ, self.occupancy):
-            self.shape_persistence += 1
-
-        self.occupancy = new_occ
-
-    # =================================================
-    # SOUND FIELD
-    # =================================================
-
-    def _sense_sound(self, world):
-        """
-        Accumulates sound field from all rooms.
-        """
-        cx, cy, _ = self.center_xyz
-        half = self.grid_size // 2
-
-        field = np.zeros_like(self.sound)
-
+        # ----------------------------------------------
+        # 1️⃣ Capture geometry (SHAPE)
+        # ----------------------------------------------
         for place in world.places.values():
-            if not hasattr(place, "rooms"):
-                continue
+            self._project_bounds(place)
 
-            for room in place.rooms.values():
-                if not hasattr(room, "get_sound_level"):
-                    continue
+            if hasattr(place, "rooms"):
+                for room in place.rooms.values():
+                    self._project_bounds(room)
 
-                level = room.get_sound_level()
-                if level <= 0:
-                    continue
+                    # --------------------------------------
+                    # 2️⃣ Capture EMISSIONS (LIGHT / SOUND)
+                    # --------------------------------------
+                    if hasattr(room, "objects"):
+                        for obj in room.objects.values():
+                            if hasattr(obj, "is_on") and obj.is_on:
+                                self._emit_from_object(obj, room)
 
-                bounds = getattr(room, "bounds", None)
-                if not bounds:
-                    continue
+        # ----------------------------------------------
+        # Persistence check
+        # ----------------------------------------------
+        if self.last_occupancy is not None:
+            if np.array_equal(self.occupancy, self.last_occupancy):
+                self.shape_persistence += 1
+            else:
+                self.shape_persistence = 0
 
-                (min_x, min_y, _), (max_x, max_y, _) = bounds
-                rx = (min_x + max_x) / 2
-                ry = (min_y + max_y) / 2
+        self.last_occupancy = self.occupancy.copy()
 
-                for i in range(self.grid_size):
-                    for j in range(self.grid_size):
-                        wx = cx + (i - half) * self.resolution
-                        wy = cy + (j - half) * self.resolution
+    # ==================================================
+    # PROJECTION HELPERS
+    # ==================================================
 
-                        d = math.hypot(wx - rx, wy - ry)
-                        atten = 1.0 if d < 1 else 1.0 / max(d * d, 1.0)
+    def _project_bounds(self, entity):
+        bounds = getattr(entity, "bounds", None)
+        if not bounds:
+            return
 
-                        field[i, j] += level * atten
+        (min_x, min_y, _), (max_x, max_y, _) = bounds
 
-        self.sound = np.clip(field, 0.0, 1.0)
+        for ix in range(self.grid_size):
+            for iy in range(self.grid_size):
+                wx = ix * self.resolution
+                wy = iy * self.resolution
 
-    # =================================================
-    # SNAPSHOT (ACCOUNTING)
-    # =================================================
+                if min_x <= wx <= max_x and min_y <= wy <= max_y:
+                    self.occupancy[iy, ix] = 1
+
+    def _emit_from_object(self, obj, room):
+        """
+        Emits light and sound into the grid when object is ON.
+        """
+        bounds = getattr(room, "bounds", None)
+        if not bounds:
+            return
+
+        (min_x, min_y, _), (max_x, max_y, _) = bounds
+        cx = (min_x + max_x) / 2
+        cy = (min_y + max_y) / 2
+
+        for ix in range(self.grid_size):
+            for iy in range(self.grid_size):
+                wx = ix * self.resolution
+                wy = iy * self.resolution
+
+                dx = wx - cx
+                dy = wy - cy
+                dist = max((dx * dx + dy * dy) ** 0.5, 1.0)
+
+                # Inverse-square falloff
+                intensity = min(1.0 / dist, 1.0)
+
+                self.sound[iy, ix] += intensity
+                self.light[iy, ix] += intensity
+
+    # ==================================================
+    # SNAPSHOT (FOR STREAMLIT / INVESTIGATOR)
+    # ==================================================
 
     def snapshot(self):
         return {
-            "source": self.name,
+            "source": "scout",
+            "name": self.name,
             "type": "scout",
             "active": self.active,
             "frame": self.frame,
             "grid_size": self.grid_size,
             "resolution": self.resolution,
-            "shape_persistence": int(self.shape_persistence),
+            "shape_persistence": self.shape_persistence,
             "occupancy_sum": int(self.occupancy.sum()),
-            "sound_sum": float(round(self.sound.sum(), 3)),
+            "sound_sum": round(float(self.sound.sum()), 3),
+            "light_sum": round(float(self.light.sum()), 3),
         }
