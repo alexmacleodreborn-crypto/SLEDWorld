@@ -5,10 +5,9 @@ from world_core.sound.sound_source import SoundSource
 
 class TVProfile:
     """
-    TV is a world object-like profile with state and signals.
-    Emits:
-      - sound (0..1)
-      - light intensity (0..1) and color ("red"/"green")
+    Stateful object with two primary signals:
+      - sound: float 0..1
+      - light: {intensity: float 0..1, color: str}
     """
 
     def __init__(self, name, position):
@@ -16,7 +15,6 @@ class TVProfile:
         self.position = position
         self.is_on = False
 
-        # Sound source is authoritative for "TV noise"
         self.sound = SoundSource(
             name=f"{name}_sound",
             position=position,
@@ -30,7 +28,6 @@ class TVProfile:
         return True
 
     def sound_level(self) -> float:
-        # If SoundSource exposes .level use it; otherwise fallback to base_level when active.
         if not self.is_on:
             return 0.0
         lvl = getattr(self.sound, "level", None)
@@ -39,7 +36,7 @@ class TVProfile:
         return float(getattr(self.sound, "base_level", 0.6))
 
     def light_signal(self) -> dict:
-        # Red standby LED when off; green when on
+        # Standby LED: red when off, green when on
         return {
             "intensity": 0.2 if not self.is_on else 0.9,
             "color": "red" if not self.is_on else "green",
