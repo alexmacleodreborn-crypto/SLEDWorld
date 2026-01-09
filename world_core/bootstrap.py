@@ -42,7 +42,6 @@ class WorldState:
         Safe even if no agents exist.
         """
         for agent in self.agents:
-            # Only agents with tick() are time-driven
             if hasattr(agent, "tick"):
                 agent.tick(self.clock)
 
@@ -80,7 +79,7 @@ def build_world(clock):
     # Observer Bot (PASSIVE, COGNITIVE)
     # -------------------------
     observer = ObserverBot(name="Observer-1")
-world.add_agent(observer)
+    world.add_agent(observer)
 
     # -------------------------
     # Walker Bot (AUTONOMOUS, PHYSICAL)
