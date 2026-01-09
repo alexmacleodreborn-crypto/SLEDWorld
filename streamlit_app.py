@@ -70,7 +70,11 @@ st.title("SLEDWorld – Reality Frame")
 # World State (Primary)
 # --------------------------
 st.subheader("World State")
-st.json(world.snapshot())
+st.json({
+    "places": list(world.places.keys()),
+    "num_places": len(world.places),
+    "num_agents": len(world.agents),
+})
 
 # --------------------------
 # World Time (Secondary)
