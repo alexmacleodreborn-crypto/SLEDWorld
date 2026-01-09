@@ -8,22 +8,15 @@ from world_core.profiles.remote_profile import RemoteProfile
 
 class RoomProfile(WorldObject):
     """
-    A room inside a house.
-
-    Rules:
-    - Pure world-layer object
-    - Real 3D volume in WORLD coordinates
-    - Contains physical objects (TV, remote, etc.)
-    - No agents
-    - No cognition
-    - No time
+    World-layer room container.
+    Contains objects. No agents. No cognition.
     """
 
     def __init__(
         self,
         name: str,
         position: tuple[float, float, float],
-        size: tuple[float, float, float],  # (width, depth, height)
+        size: tuple[float, float, float],
         floor: int,
         room_type: str,
     ):
@@ -32,49 +25,23 @@ class RoomProfile(WorldObject):
         width, depth, height = size
         x, y, z = position
 
-        # -----------------------------------------
-        # World-space bounding box (AUTHORITATIVE)
-        # -----------------------------------------
         self.set_bounds(
             min_xyz=(x, y, z),
             max_xyz=(x + width, y + depth, z + height),
         )
 
-        # -----------------------------------------
-        # Physical properties
-        # -----------------------------------------
-        self.size = {
-            "width": float(width),
-            "depth": float(depth),
-            "height": float(height),
-        }
-
+        self.size = {"width": float(width), "depth": float(depth), "height": float(height)}
         self.floor = int(floor)
         self.room_type = str(room_type)
-
-        # Canonical semantic label (observer-only, not cognition)
         self.label = f"room:{self.room_type}"
 
-        # -----------------------------------------
-        # Physical objects inside the room
-        # -----------------------------------------
-        self.objects: dict[str, WorldObject] = {}
+        self.objects: dict[str, object] = {}
         self._build_objects()
 
-    # =================================================
-    # Object construction
-    # =================================================
-
     def _build_objects(self):
-        """
-        Populate room with physical objects.
-        """
         if self.room_type == "living_room":
             (min_x, min_y, min_z), (max_x, max_y, _) = self.bounds
 
-            # --------------------
-            # TV (fixed)
-            # --------------------
             tv_x = (min_x + max_x) / 2.0
             tv_y = min_y + 0.5
             tv_z = min_z + 1.0
@@ -84,25 +51,14 @@ class RoomProfile(WorldObject):
                 position=(tv_x, tv_y, tv_z),
             )
 
-            # --------------------
-            # Remote (portable, bound to TV)
-            # --------------------
             remote = RemoteProfile(
                 name=f"{self.name}:remote",
-                position=(
-                    tv_x - 1.0,
-                    tv_y + 1.0,
-                    min_z + 0.8,
-                ),
-                tv=tv,  # binds remote → TV
+                position=(tv_x - 1.0, tv_y + 1.0, min_z + 0.8),
+                tv=tv,
             )
 
             self.objects["tv"] = tv
             self.objects["remote"] = remote
-
-    # =================================================
-    # Spatial helpers
-    # =================================================
 
     def random_point_inside(self) -> tuple[float, float, float]:
         (min_x, min_y, min_z), (max_x, max_y, max_z) = self.bounds
@@ -112,44 +68,45 @@ class RoomProfile(WorldObject):
             random.uniform(min_z, max_z),
         )
 
-    # =================================================
-    # Environmental outputs (ENERGY, NOT MEANING)
-    # =================================================
-
     def get_sound_level(self) -> float:
         total = 0.0
         for obj in self.objects.values():
-            if hasattr(obj, "sound_level"):
-                total += obj.sound_level()
-        return round(min(total, 1.0), 2)
+            if hasattr(obj, "get_sound_level"):
+                try:
+                    total += float(obj.get_sound_level())
+                except Exception:
+                    pass
+            elif hasattr(obj, "sound_level"):
+                try:
+                    total += float(obj.sound_level())
+                except Exception:
+                    pass
+        return round(min(total, 1.0), 3)
 
-    def get_light_level(self) -> float:
-        total = 0.0
+    def get_light_level(self) -> dict:
+        """
+        Aggregate light output from contained objects.
+        Returns a simple merged view (dominant color by max intensity).
+        """
+        best = {"intensity": 0.0, "color": "none"}
         for obj in self.objects.values():
-            if hasattr(obj, "light_level"):
-                total += obj.light_level()
-        return round(min(total, 1.0), 2)
-
-    # =================================================
-    # Interaction surface
-    # =================================================
+            if hasattr(obj, "get_light_output"):
+                try:
+                    lo = obj.get_light_output()
+                    inten = float(lo.get("intensity", 0.0))
+                    if inten >= best["intensity"]:
+                        best = {"intensity": inten, "color": lo.get("color", "none")}
+                except Exception:
+                    pass
+        return best
 
     def interact(self, object_name: str, action: str) -> bool:
-        """
-        Perform a physical interaction with an object.
-        """
         obj = self.objects.get(object_name)
         if obj is None:
             return False
-
         if hasattr(obj, action):
-            return getattr(obj, action)()
-
+            return bool(getattr(obj, action)())
         return False
-
-    # =================================================
-    # Observer snapshot (STRUCTURAL ONLY)
-    # =================================================
 
     def snapshot(self):
         base = super().snapshot()
@@ -160,10 +117,8 @@ class RoomProfile(WorldObject):
             "floor": self.floor,
             "size": self.size,
             "sound_level": self.get_sound_level(),
-            "light_level": self.get_light_level(),
-            "objects": {
-                name: obj.snapshot()
-                for name, obj in self.objects.items()
-            },
+            "light": self.get_light_level(),
+            "objects": {name: (obj.snapshot() if hasattr(obj, "snapshot") else str(obj))
+                        for name, obj in self.objects.items()},
         })
         return base
