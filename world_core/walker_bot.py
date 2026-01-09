@@ -7,8 +7,12 @@ from datetime import datetime
 
 class WalkerBot:
     """
-    Physical actuator only.
-    Periodically returns to living room TV area and uses the remote.
+    Physical probe agent.
+    Moves using world time.
+    Interacts with objects when in proximity.
+
+    Update:
+      - Every N frames, returns to living-room TV and toggles power.
     """
 
     def __init__(self, name: str, start_xyz, world):
@@ -21,16 +25,15 @@ class WalkerBot:
 
         self.target = None
         self.target_label = None
-
         self.current_area = "world"
+
         self.heard_sound_level = 0.0
-
         self.ledger = []
-        self._last_time = None
 
-        # Frame-based behavior (no human time semantics)
-        self.frame_counter = 0
-        self.tv_visit_period = 15
+        self._last_time = None
+        self._frame_counter = 0
+        self._tv_return_period = 15  # frames
+        self._force_tv_mode = True
 
         self._pick_new_target()
         self._resolve_current_area()
@@ -41,11 +44,22 @@ class WalkerBot:
             t = self.world.clock.world_datetime.isoformat(timespec="seconds")
         except Exception:
             t = datetime.utcnow().isoformat(timespec="seconds")
-        self.ledger.append({"time": t, "event": event, "area": self.current_area})
+
+        self.ledger.append({
+            "time": t,
+            "frame": self._frame_counter,
+            "event": event,
+            "area": self.current_area,
+        })
 
     def _get_bounds(self, obj):
-        if hasattr(obj, "bounds") and obj.bounds is not None:
-            return obj.bounds
+        b = getattr(obj, "bounds", None)
+        if b is not None:
+            return b
+        min_xyz = getattr(obj, "min_xyz", None)
+        max_xyz = getattr(obj, "max_xyz", None)
+        if min_xyz and max_xyz:
+            return (min_xyz, max_xyz)
         return None
 
     def _random_point_in_bounds(self, bounds):
@@ -57,32 +71,48 @@ class WalkerBot:
         ]
 
     def _find_living_room_tv_point(self):
-        # Search world places -> rooms -> living_room -> tv position
+        # Find a living_room and return the TV position if possible
         for place in self.world.places.values():
-            if not hasattr(place, "rooms"):
+            rooms = getattr(place, "rooms", None)
+            if not rooms:
                 continue
-            for room in place.rooms.values():
+            for room in rooms.values():
                 if getattr(room, "room_type", "") == "living_room":
-                    tv = getattr(room, "objects", {}).get("tv")
+                    objs = getattr(room, "objects", {})
+                    tv = objs.get("tv")
                     if tv and hasattr(tv, "position"):
-                        x, y, z = tv.position
-                        # Stand in front of the TV, inside the room
-                        return [x, y - 1.2, z]
-        return None
+                        return list(tv.position), f"{room.name}:tv"
+                    # fallback: center of room
+                    bounds = self._get_bounds(room)
+                    if bounds:
+                        (min_x, min_y, min_z), (max_x, max_y, max_z) = bounds
+                        return [(min_x+max_x)/2, (min_y+max_y)/2, (min_z+max_z)/2], room.name
+        return None, None
 
     def _pick_new_target(self):
-        # Default wandering target: any room bounds if available, else any place bounds.
+        # Periodic forced return to TV
+        if self._force_tv_mode and (self._frame_counter % self._tv_return_period == 0):
+            tv_pt, label = self._find_living_room_tv_point()
+            if tv_pt is not None:
+                self.target = tv_pt
+                self.target_label = label
+                self._log(f"force_target:{label}")
+                return
+
         room_targets = []
         place_targets = []
+
         for place in self.world.places.values():
+            rooms = getattr(place, "rooms", None)
+            if rooms:
+                for room in rooms.values():
+                    bounds = self._get_bounds(room)
+                    if bounds:
+                        room_targets.append((getattr(room, "name", "room"), bounds))
+
             bounds = self._get_bounds(place)
             if bounds:
-                place_targets.append((place.name, bounds))
-            if hasattr(place, "rooms"):
-                for room in place.rooms.values():
-                    rb = self._get_bounds(room)
-                    if rb:
-                        room_targets.append((room.name, rb))
+                place_targets.append((getattr(place, "name", "place"), bounds))
 
         if room_targets:
             label, bounds = random.choice(room_targets)
@@ -103,12 +133,12 @@ class WalkerBot:
         self._log("no_target")
 
     def tick(self, clock):
+        self._frame_counter += 1
         now = clock.world_datetime
+
         if self._last_time is None:
             self._last_time = now
             return
-
-        self.frame_counter += 1
 
         delta_seconds = (now - self._last_time).total_seconds()
         self._last_time = now
@@ -116,18 +146,8 @@ class WalkerBot:
             return
 
         minutes = delta_seconds / 60.0
-
-        # Every N frames, force a visit to living room TV
-        if self.frame_counter % self.tv_visit_period == 0:
-            tv_point = self._find_living_room_tv_point()
-            if tv_point:
-                self.target = tv_point
-                self.target_label = "living_room:tv_zone"
-                self._log("forced_target:tv_zone")
-
         self._move(minutes)
         self._resolve_current_area()
-        self._sense_sound()
         self._auto_interact()
 
     def _move(self, minutes):
@@ -138,101 +158,79 @@ class WalkerBot:
         dx = self.target[0] - self.position[0]
         dy = self.target[1] - self.position[1]
         dz = self.target[2] - self.position[2]
+        distance = math.sqrt(dx*dx + dy*dy + dz*dz)
 
-        distance = math.sqrt(dx * dx + dy * dy + dz * dz)
         if distance <= self.arrival_threshold:
-            self._log(f"arrived:{self.target_label}")
+            self._resolve_current_area()
+            self._log(f"arrived:{self.current_area}")
+
+            # If arrived at TV target: toggle TV using remote if possible
+            if self.target_label and ":tv" in self.target_label:
+                self._try_toggle_tv()
+            self._pick_new_target()
             return
 
         step = self.speed * minutes
         scale = min(step / distance, 1.0)
-
         self.position[0] += dx * scale
         self.position[1] += dy * scale
         self.position[2] += dz * scale
 
     def _resolve_current_area(self):
         xyz = tuple(self.position)
-
         for place in self.world.places.values():
-            if hasattr(place, "rooms"):
-                for room in place.rooms.values():
-                    if room.contains_world_point(xyz):
-                        self.current_area = room.name
+            rooms = getattr(place, "rooms", None)
+            if rooms:
+                for room in rooms.values():
+                    if hasattr(room, "contains_world_point") and room.contains_world_point(xyz):
+                        self.current_area = getattr(room, "name", "room")
                         return
-
         for place in self.world.places.values():
-            if place.contains_world_point(xyz):
-                self.current_area = place.name
+            if hasattr(place, "contains_world_point") and place.contains_world_point(xyz):
+                self.current_area = getattr(place, "name", "place")
                 return
-
         self.current_area = "world"
 
-    def _sense_sound(self):
-        total_sound = 0.0
-        x, y, z = self.position
-
+    def _try_toggle_tv(self):
+        # Try to find current room and use remote to toggle tv
         for place in self.world.places.values():
-            if not hasattr(place, "rooms"):
+            rooms = getattr(place, "rooms", None)
+            if not rooms:
                 continue
-
-            for room in place.rooms.values():
-                if not hasattr(room, "get_sound_level"):
+            for room in rooms.values():
+                if getattr(room, "name", "") != self.current_area:
                     continue
-
-                source = room.get_sound_level()
-                if source <= 0:
-                    continue
-
-                bounds = self._get_bounds(room)
-                if not bounds:
-                    continue
-
-                (min_x, min_y, min_z), (max_x, max_y, max_z) = bounds
-                cx = (min_x + max_x) / 2
-                cy = (min_y + max_y) / 2
-                cz = (min_z + max_z) / 2
-
-                dx = x - cx
-                dy = y - cy
-                dz = z - cz
-                dist = math.sqrt(dx*dx + dy*dy + dz*dz)
-
-                attenuation = 1.0 if dist < 1.0 else 1.0 / (dist ** 2)
-                attenuation = max(attenuation, 0.02)
-                total_sound += source * attenuation
-
-        self.heard_sound_level = round(min(total_sound, 1.0), 3)
-        if self.heard_sound_level >= 0.05:
-            self._log(f"heard_sound:{self.heard_sound_level}")
+                objs = getattr(room, "objects", {})
+                if "remote" in objs:
+                    try:
+                        room.interact("remote", "power_toggle")
+                        self._log("remote:power_toggle")
+                        return
+                    except Exception:
+                        pass
+                if "tv" in objs:
+                    tv = objs["tv"]
+                    if hasattr(tv, "power_toggle"):
+                        tv.power_toggle()
+                        self._log("tv:power_toggle_direct")
+                        return
 
     def _auto_interact(self):
-        """
-        If we are in the living room and close to TV zone, toggle remote.
-        """
-        if self.target_label != "living_room:tv_zone":
-            return
-
-        # Only toggle when we are basically at target
-        dx = self.target[0] - self.position[0]
-        dy = self.target[1] - self.position[1]
-        dz = self.target[2] - self.position[2]
-        if math.sqrt(dx*dx + dy*dy + dz*dz) > 0.8:
-            return
-
-        # Find living room and use remote
+        # Optional extra random actions if in the living room
         for place in self.world.places.values():
-            if not hasattr(place, "rooms"):
+            rooms = getattr(place, "rooms", None)
+            if not rooms:
                 continue
-            for room in place.rooms.values():
-                if getattr(room, "room_type", "") != "living_room":
+            for room in rooms.values():
+                if getattr(room, "name", "") != self.current_area:
                     continue
-                if "remote" in getattr(room, "objects", {}):
+                objs = getattr(room, "objects", {})
+                if "remote" not in objs:
+                    return
+                r = random.random()
+                if r < 0.01:
                     room.interact("remote", "power_toggle")
-                    self._log("remote:power_toggle")
-                    # After interaction, wander again
-                    self.target = None
-                    self.target_label = None
+                    self._log("remote:power_toggle_random")
                     return
 
     def snapshot(self):
@@ -245,13 +243,13 @@ class WalkerBot:
 
         return {
             "source": "walker",
-            "agent": self.name,
-            "frame": self.frame_counter,
+            "type": "walker",
+            "name": self.name,
+            "frame": self._frame_counter,
             "position_xyz": [round(v, 2) for v in self.position],
             "current_area": self.current_area,
             "destination": self.target_label,
             "distance_to_target_m": distance,
-            "heard_sound_level": self.heard_sound_level,
             "speed_m_per_min": self.speed,
-            "ledger_tail": self.ledger[-5:],
+            "ledger_tail": self.ledger[-10:],
         }
