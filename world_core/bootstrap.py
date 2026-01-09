@@ -13,7 +13,8 @@ from world_core.profiles.house_profile import HouseProfile
 class WorldState:
     """
     World container.
-    Reality exists first. Everything else observes or records.
+    Reality exists first.
+    All cognition is downstream.
     """
 
     def __init__(self, clock):
@@ -22,15 +23,15 @@ class WorldState:
         self.places = {}
         self.agents = []
 
-        # Accounting / attention layer
+        # Accounting / memory layer
         self.salience_investigator = SalienceInvestigatorBot()
 
-        # Active scouts (spawned by investigator)
+        # Active scouts
         self.scouts = []
 
-    # -------------------------
+    # -----------------------------------------
     # Registration
-    # -------------------------
+    # -----------------------------------------
 
     def add_place(self, place):
         self.places[place.name] = place
@@ -39,54 +40,51 @@ class WorldState:
     def add_agent(self, agent):
         self.agents.append(agent)
 
-    # -------------------------
-    # WORLD TICK (THE PIPELINE)
-    # -------------------------
+    # -----------------------------------------
+    # WORLD TICK (SINGLE SOURCE OF TRUTH)
+    # -----------------------------------------
 
     def tick(self):
         """
         One world frame.
+        Physics → perception → accounting.
         """
 
-        # 1️⃣ Physics
+        # 1️⃣ Physics & perception
         for agent in self.agents:
             if hasattr(agent, "tick"):
                 agent.tick(self.clock)
 
-        # 2️⃣ Perception
-        for agent in self.agents:
             if hasattr(agent, "observe"):
                 agent.observe(self)
 
-        # 3️⃣ Accounting ingestion
+        # 2️⃣ Feed ALL snapshots into investigator
         for agent in self.agents:
-            if hasattr(agent, "export_event"):
-                evt = agent.export_event()
-                if evt:
-                    self.salience_investigator.ingest_physical_event(evt)
+            if hasattr(agent, "snapshot"):
+                snap = agent.snapshot()
 
-            if hasattr(agent, "export_snapshot"):
-                snap = agent.export_snapshot()
-                if snap:
-                    self.salience_investigator.ingest_observer_snapshot(snap)
+                # Ensure snapshot declares its source
+                if isinstance(snap, dict) and "source" in snap:
+                    self.salience_investigator.ingest(snap)
 
-        # 4️⃣ Investigator decides where to allocate attention
-        new_scouts = self.salience_investigator.spawn_scouts_if_needed()
-
-        for scout in new_scouts:
-            self.scouts.append(scout)
-
-        # 5️⃣ Scouts observe (depth + shape)
+        # 3️⃣ Scouts observe and report
         for scout in list(self.scouts):
             scout.observe(self)
 
+            if hasattr(scout, "snapshot"):
+                snap = scout.snapshot()
+                if "source" in snap:
+                    self.salience_investigator.ingest(snap)
+
             if not scout.active:
-                report = scout.export_report()
-                self.salience_investigator.ingest_scout_report(report)
                 self.scouts.remove(scout)
 
 
 def build_world(clock):
+    """
+    Constructs the base world.
+    """
+
     world = WorldState(clock)
 
     # -------------------------
