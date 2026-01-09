@@ -8,8 +8,7 @@ from world_core.profiles.remote_profile import RemoteProfile
 
 class RoomProfile(WorldObject):
     """
-    World-layer room container.
-    Contains objects. No agents. No cognition.
+    Room container with physical objects.
     """
 
     def __init__(
@@ -39,26 +38,36 @@ class RoomProfile(WorldObject):
         self._build_objects()
 
     def _build_objects(self):
-        if self.room_type == "living_room":
-            (min_x, min_y, min_z), (max_x, max_y, _) = self.bounds
+        if self.room_type != "living_room":
+            return
 
-            tv_x = (min_x + max_x) / 2.0
-            tv_y = min_y + 0.5
-            tv_z = min_z + 1.0
+        (min_x, min_y, min_z), (max_x, max_y, max_z) = self.bounds
 
-            tv = TVProfile(
-                name=f"{self.name}:tv",
-                position=(tv_x, tv_y, tv_z),
-            )
+        # Wall-mounted TV:
+        # - centered horizontally on the far wall (max_y side)
+        # - slightly inset from wall so it's inside room bounds
+        tv_x = (min_x + max_x) / 2.0
+        tv_y = max_y - 0.10
+        tv_z = min_z + 1.50  # wall height
 
-            remote = RemoteProfile(
-                name=f"{self.name}:remote",
-                position=(tv_x - 1.0, tv_y + 1.0, min_z + 0.8),
-                tv=tv,
-            )
+        tv = TVProfile(
+            name=f"{self.name}:tv",
+            position=(tv_x, tv_y, tv_z),
+        )
 
-            self.objects["tv"] = tv
-            self.objects["remote"] = remote
+        # Remote on a "coffee table" area (center-ish)
+        remote = RemoteProfile(
+            name=f"{self.name}:remote",
+            position=(tv_x - 0.8, (min_y + max_y) / 2.0, min_z + 0.75),
+            tv=tv,
+        )
+
+        self.objects["tv"] = tv
+        self.objects["remote"] = remote
+
+    # -------------------------
+    # Helpers
+    # -------------------------
 
     def random_point_inside(self) -> tuple[float, float, float]:
         (min_x, min_y, min_z), (max_x, max_y, max_z) = self.bounds
@@ -71,33 +80,21 @@ class RoomProfile(WorldObject):
     def get_sound_level(self) -> float:
         total = 0.0
         for obj in self.objects.values():
-            if hasattr(obj, "get_sound_level"):
-                try:
-                    total += float(obj.get_sound_level())
-                except Exception:
-                    pass
-            elif hasattr(obj, "sound_level"):
-                try:
-                    total += float(obj.sound_level())
-                except Exception:
-                    pass
+            if hasattr(obj, "sound_level"):
+                total += float(obj.sound_level())
         return round(min(total, 1.0), 3)
 
     def get_light_level(self) -> dict:
         """
-        Aggregate light output from contained objects.
-        Returns a simple merged view (dominant color by max intensity).
+        Aggregate "light signatures" in this room.
+        For now, just the TV LED is enough for your first symbol.
         """
-        best = {"intensity": 0.0, "color": "none"}
+        best = {"intensity": 0.0, "color": None}
         for obj in self.objects.values():
-            if hasattr(obj, "get_light_output"):
-                try:
-                    lo = obj.get_light_output()
-                    inten = float(lo.get("intensity", 0.0))
-                    if inten >= best["intensity"]:
-                        best = {"intensity": inten, "color": lo.get("color", "none")}
-                except Exception:
-                    pass
+            if hasattr(obj, "light_level"):
+                lv = obj.light_level()
+                if lv and lv.get("intensity", 0.0) > best["intensity"]:
+                    best = lv
         return best
 
     def interact(self, object_name: str, action: str) -> bool:
@@ -118,7 +115,7 @@ class RoomProfile(WorldObject):
             "size": self.size,
             "sound_level": self.get_sound_level(),
             "light": self.get_light_level(),
-            "objects": {name: (obj.snapshot() if hasattr(obj, "snapshot") else str(obj))
+            "objects": {name: obj.snapshot() if hasattr(obj, "snapshot") else str(obj)
                         for name, obj in self.objects.items()},
         })
         return base
