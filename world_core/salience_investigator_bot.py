@@ -1,81 +1,119 @@
-# world_core/salience_investigator_bot.py
-
-from world_core.scout_bot import ScoutBot
+import math
+from collections import defaultdict
 
 
 class SalienceInvestigatorBot:
     """
-    Accounting + attention allocator.
+    Accounting / state-binding layer.
+
+    Responsibilities:
+    - Receive observer + scout snapshots
+    - Track shape persistence signatures
+    - Detect correlated intensity changes
+    - Record STATE DELTAS (no semantics)
     """
 
     def __init__(self):
         self.frame = 0
         self.ledger = []
 
-        # Simple salience counters
-        self.sound_events = 0
+        # Shape memory
+        self.shape_memory = {}  # shape_id -> last intensities
+        self.shape_age = defaultdict(int)
 
-    # -------------------------
+        # Thresholds (deliberately simple)
+        self.min_persistence = 3
+        self.sound_delta_thresh = 0.15
+        self.light_delta_thresh = 0.15
+
+    # =================================================
     # INGESTION
-    # -------------------------
+    # =================================================
 
-    def ingest_physical_event(self, event):
-        self.ledger.append({
-            "source": "walker",
-            "frame": self.frame,
-            "event": event,
-        })
+    def ingest_scout_snapshot(self, scout_snapshot: dict):
+        """
+        Scout snapshot must include:
+        - shape_signature
+        - sound_level
+        - light_level
+        - persistence
+        """
 
-        if event.get("sound_emitted", 0) > 0:
-            self.sound_events += 1
-
-    def ingest_observer_snapshot(self, snapshot):
         self.frame += 1
-        self.ledger.append({
-            "source": "observer",
+
+        shape_id = scout_snapshot.get("shape_signature")
+        persistence = scout_snapshot.get("shape_persistence", 0)
+
+        sound = scout_snapshot.get("sound_level", 0.0)
+        light = scout_snapshot.get("light_level", 0.0)
+
+        if shape_id is None:
+            return
+
+        self.shape_age[shape_id] += 1
+
+        # Only consider stable shapes
+        if persistence < self.min_persistence:
+            self.shape_memory[shape_id] = (sound, light)
+            return
+
+        prev = self.shape_memory.get(shape_id)
+
+        if prev is not None:
+            prev_sound, prev_light = prev
+
+            sound_delta = sound - prev_sound
+            light_delta = light - prev_light
+
+            # Correlated intensity change
+            if (
+                abs(sound_delta) >= self.sound_delta_thresh
+                or abs(light_delta) >= self.light_delta_thresh
+            ):
+                self._record_state_change(
+                    shape_id=shape_id,
+                    sound_delta=sound_delta,
+                    light_delta=light_delta,
+                    persistence=persistence,
+                )
+
+        self.shape_memory[shape_id] = (sound, light)
+
+    # =================================================
+    # STATE RECORD
+    # =================================================
+
+    def _record_state_change(
+        self,
+        shape_id: str,
+        sound_delta: float,
+        light_delta: float,
+        persistence: int,
+    ):
+        entry = {
             "frame": self.frame,
-            "snapshot": snapshot,
-        })
+            "shape_id": shape_id,
+            "state_delta": {
+                "sound": round(sound_delta, 3),
+                "light": round(light_delta, 3),
+            },
+            "direction": (
+                "up"
+                if (sound_delta + light_delta) > 0
+                else "down"
+            ),
+            "persistence": persistence,
+        }
 
-    def ingest_scout_report(self, report):
-        self.ledger.append({
-            "source": "scout",
-            "frame": self.frame,
-            "report": report,
-        })
+        self.ledger.append(entry)
 
-    # -------------------------
-    # ATTENTION ALLOCATION
-    # -------------------------
-
-    def spawn_scouts_if_needed(self):
-        """
-        If repeated sound events occur, allocate a scout.
-        """
-        scouts = []
-
-        if self.sound_events >= 2:
-            # Reset counter to avoid infinite spawning
-            self.sound_events = 0
-
-            scout = ScoutBot(
-                name=f"Scout-sound-{self.frame}",
-                origin_xyz=(4800, 5100, 0),
-                target_xyz=(4800, 5100, 0),
-                grid_size=16,
-                resolution=1.0,
-                max_frames=20,
-            )
-            scouts.append(scout)
-
-        return scouts
-
-    # -------------------------
-    # SNAPSHOT (UI)
-    # -------------------------
+    # =================================================
+    # SNAPSHOT
+    # =================================================
 
     def snapshot(self):
         return {
             "frames_processed": self.frame,
-            "ledger_entries": len(self.ledger),
+            "known_shapes": len(self.shape_memory),
+            "state_events": len(self.ledger),
         }
