@@ -1,79 +1,61 @@
+# world_core/salience_investigator_bot.py
+
 class SalienceInvestigatorBot:
     """
-    Accounting / state-binding layer.
-    Single ingestion interface.
+    Accounting / memory layer.
+    Does not perceive directly.
+    Receives structured reports from other agents.
     """
 
     def __init__(self):
-        self.frame = 0
+        # Frame counter = how many world frames processed
+        self.frame_counter = 0
+
+        # Ledger of all ingested reports
         self.ledger = []
 
-        self.shape_memory = {}
-        self.min_persistence = 3
-        self.sound_delta_thresh = 0.15
-        self.light_delta_thresh = 0.15
+        # Simple tallies (expand later)
+        self.sources_seen = {}
+        self.event_counts = {}
 
     # =================================================
-    # SINGLE INGESTION CONTRACT
+    # INGESTION
     # =================================================
 
     def ingest(self, snapshot: dict):
         """
-        Accepts any snapshot with a declared 'source'.
+        Accepts a snapshot from any agent.
+        Snapshot MUST contain 'source'.
         """
-        self.frame += 1
 
-        source = snapshot.get("source")
-
-        if source == "scout":
-            self._handle_scout(snapshot)
-
-        # Observer, walker, others can be added later
-        # without breaking anything
-
-    # =================================================
-    # SCOUT HANDLING (STEP 1 & 2)
-    # =================================================
-
-    def _handle_scout(self, snap):
-        shape_id = snap.get("shape_signature")
-        persistence = snap.get("shape_persistence", 0)
-
-        sound = snap.get("sound_level", 0.0)
-        light = snap.get("light_level", 0.0)
-
-        if shape_id is None:
+        if not isinstance(snapshot, dict):
             return
 
-        prev = self.shape_memory.get(shape_id)
+        source = snapshot.get("source", "unknown")
 
-        if prev and persistence >= self.min_persistence:
-            prev_sound, prev_light = prev
+        # Frame advances when ANY snapshot is ingested
+        self.frame_counter += 1
 
-            if (
-                abs(sound - prev_sound) >= self.sound_delta_thresh
-                or abs(light - prev_light) >= self.light_delta_thresh
-            ):
-                self.ledger.append({
-                    "frame": self.frame,
-                    "shape_id": shape_id,
-                    "state_delta": {
-                        "sound": round(sound - prev_sound, 3),
-                        "light": round(light - prev_light, 3),
-                    },
-                    "direction": "up" if (sound + light) > (prev_sound + prev_light) else "down",
-                    "persistence": persistence,
-                })
+        # Track sources
+        self.sources_seen[source] = self.sources_seen.get(source, 0) + 1
 
-        self.shape_memory[shape_id] = (sound, light)
+        # Track events if present
+        event = snapshot.get("event")
+        if event:
+            self.event_counts[event] = self.event_counts.get(event, 0) + 1
+
+        # Store full snapshot (append-only memory)
+        self.ledger.append(snapshot)
 
     # =================================================
-    # SNAPSHOT
+    # OBSERVER VIEW
     # =================================================
 
     def snapshot(self):
         return {
-            "frames_processed": self.frame,
-            "known_shapes": len(self.shape_memory),
-            "state_events": len(self.ledger),
+            "type": "salience_investigator",
+            "frames_processed": self.frame_counter,
+            "total_transactions": len(self.ledger),
+            "sources_seen": self.sources_seen,
+            "event_counts": self.event_counts,
         }
