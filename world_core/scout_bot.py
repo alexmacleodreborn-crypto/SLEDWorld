@@ -1,111 +1,135 @@
 # world_core/scout_bot.py
 
-from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Tuple, Dict, Any, List, Optional
-import math
+from typing import Dict, Any, Optional
+
 
 @dataclass
 class ScoutBot:
     """
-    Focused local sensor.
-    signal in {"sound","light","shape"}.
-    Produces a small 2D grid centered at center_xyz.
+    Salience scout.
+
+    Purpose:
+    - Monitor ONE feature stream (sound / light / shape)
+    - Detect change vs persistence
+    - Report to ledger
+    - No cognition
+    - No interaction
     """
+
     name: str
-    signal: str
-    center_xyz: Tuple[float, float, float]
-    extent_m: float = 10.0
-    resolution_m: float = 1.0
-    max_frames: int = 50
+    focus: str                    # "sound", "light", "shape"
+    target: Optional[str] = None  # e.g. "tv", "room:living_room"
+    max_frames: int = 200
 
     active: bool = True
     frames: int = 0
-    grid: Optional[List[List[float]]] = None
+
+    last_value: Optional[Any] = None
+    persistence: int = 0
+
     last_snapshot: Dict[str, Any] = field(default_factory=dict)
+
+    # =================================================
+    # Observation
+    # =================================================
 
     def observe(self, world):
         if not self.active:
             return
+
         self.frames += 1
         if self.frames > self.max_frames:
             self.active = False
             return
 
-        cx, cy, cz = self.center_xyz
-        r = self.extent_m
-        step = self.resolution_m
-        n = int((2 * r) / step)
+        value = self._extract_value(world)
 
-        grid = [[0.0 for _ in range(n)] for __ in range(n)]
+        if value is None:
+            return
 
-        # gather sources: rooms + objects
-        rooms = []
-        for place in world.places.values():
-            if hasattr(place, "rooms"):
-                rooms.extend(list(place.rooms.values()))
+        if value == self.last_value:
+            self.persistence += 1
+            delta = 0
+        else:
+            self.persistence = 1
+            delta = 1
 
-        for iy in range(n):
-            y = cy - r + iy * step
-            for ix in range(n):
-                x = cx - r + ix * step
+        self.last_value = value
 
-                if self.signal == "shape":
-                    # 1 if point is inside any room/place bounds (solid proxy)
-                    solid = 0.0
-                    for place in world.places.values():
-                        if hasattr(place, "contains_world_point") and place.contains_world_point((x, y, cz)):
-                            solid = 1.0
-                            break
-                    if solid == 0.0:
-                        for room in rooms:
-                            if room.contains_world_point((x, y, cz)):
-                                solid = 1.0
-                                break
-                    grid[iy][ix] = solid
-
-                elif self.signal in ("sound", "light"):
-                    val = 0.0
-                    for room in rooms:
-                        # room returns aggregate
-                        if self.signal == "sound":
-                            src = getattr(room, "get_sound_level", lambda: 0.0)()
-                        else:
-                            src = getattr(room, "get_light_level", lambda: 0.0)()
-                        if src <= 0:
-                            continue
-
-                        # approximate room center for attenuation
-                        if room.bounds is None:
-                            continue
-                        (minx, miny, minz), (maxx, maxy, maxz) = room.bounds
-                        rx = (minx + maxx) / 2
-                        ry = (miny + maxy) / 2
-                        rz = (minz + maxz) / 2
-                        d = math.sqrt((x-rx)**2 + (y-ry)**2 + (cz-rz)**2)
-                        att = 1.0 if d < 1.0 else 1.0 / (d**2)
-                        att = max(att, 0.02)
-                        val += src * att
-                    grid[iy][ix] = round(min(val, 1.0), 3)
-
-        self.grid = grid
         self.last_snapshot = {
             "source": "scout",
             "name": self.name,
-            "signal": self.signal,
-            "frame": getattr(world, "frame", self.frames),
+            "focus": self.focus,
+            "target": self.target,
+            "frame": self.frames,
+            "value": value,
+            "delta": delta,
+            "persistence": self.persistence,
             "active": self.active,
-            "center_xyz": self.center_xyz,
-            "resolution_m": step,
-            "grid_size": n,
-            "grid": grid,
         }
+
+    # =================================================
+    # Feature extraction
+    # =================================================
+
+    def _extract_value(self, world):
+        """
+        Pull the focused feature from the world.
+        """
+
+        # ------------------------------
+        # SOUND
+        # ------------------------------
+        if self.focus == "sound":
+            total = 0.0
+            for place in world.places.values():
+                if hasattr(place, "rooms"):
+                    for room in place.rooms.values():
+                        if self.target and self.target not in room.name:
+                            continue
+                        if hasattr(room, "get_sound_level"):
+                            total += room.get_sound_level()
+            return round(total, 3)
+
+        # ------------------------------
+        # LIGHT
+        # ------------------------------
+        if self.focus == "light":
+            total = 0.0
+            for place in world.places.values():
+                if hasattr(place, "rooms"):
+                    for room in place.rooms.values():
+                        if self.target and self.target not in room.name:
+                            continue
+                        for obj in room.objects.values():
+                            if hasattr(obj, "light"):
+                                total += obj.light.level()
+            return round(total, 3)
+
+        # ------------------------------
+        # SHAPE (binary occupancy)
+        # ------------------------------
+        if self.focus == "shape":
+            count = 0
+            for place in world.places.values():
+                if hasattr(place, "bounds"):
+                    count += 1
+                if hasattr(place, "rooms"):
+                    count += len(place.rooms)
+            return count
+
+        return None
+
+    # =================================================
+    # Snapshot
+    # =================================================
 
     def snapshot(self) -> Dict[str, Any]:
         return self.last_snapshot or {
             "source": "scout",
             "name": self.name,
-            "signal": self.signal,
+            "focus": self.focus,
             "active": self.active,
             "frame": self.frames,
         }
