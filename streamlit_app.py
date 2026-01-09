@@ -15,13 +15,12 @@ st.set_page_config(
 # Session initialisation (ORDER MATTERS)
 # ==================================================
 if "clock" not in st.session_state:
-    # Clock exists, but is no longer the driver
+    # Clock exists but does NOT drive the world
     st.session_state.clock = WorldClock(acceleration=1)
 
 clock = st.session_state.clock
 
 if "world" not in st.session_state:
-    # Build world once, bound to clock
     st.session_state.world = build_world(clock)
 
 world = st.session_state.world
@@ -51,19 +50,16 @@ advance_steps = st.sidebar.slider(
 if st.sidebar.button("▶ Advance World"):
     for _ in range(advance_steps):
         # ------------------------------------------
-        # TEMP REALITY BRIDGE
+        # REALITY BRIDGE
         # ------------------------------------------
         # World currently advances via tick()
-        # We treat this as a meaningful change event
+        # This is treated as a meaningful change
         world.tick()
-
-        # Annotate clock only as a record
-        clock.annotate(event=advance_reason)
 
 st.sidebar.divider()
 st.sidebar.caption(
     "World advances via change, not scheduled time.\n"
-    "Clock records events only."
+    "Clock is present but non-authoritative."
 )
 
 # ==================================================
@@ -84,11 +80,11 @@ st.json({
 # --------------------------
 # World Time (Derived / Secondary)
 # --------------------------
-st.subheader("World Time (Derived)")
+st.subheader("World Time (Secondary)")
 st.json(clock.snapshot())
 
 st.caption(
-    "Time is derived from change events, not a driver of reality."
+    "World time is a record, not a cause."
 )
 
 # --------------------------
@@ -122,5 +118,5 @@ else:
 # ==================================================
 st.caption(
     "This view represents the objective world frame.\n"
-    "Agents and systems must adapt to the world as it persists."
+    "Reality persists independently of agents and schedules."
 )
