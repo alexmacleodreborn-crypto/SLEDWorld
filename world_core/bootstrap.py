@@ -1,12 +1,9 @@
 # world_core/bootstrap.py
 
 from world_core.world_grid import WorldGrid
-from world_core.world_space import WorldSpace
-
 from world_core.walker_bot import WalkerBot
 from world_core.observer_bot import ObserverBot
 from world_core.scout_bot import ScoutBot
-from world_core.surveyor_bot import SurveyorBot
 from world_core.salience_investigator_bot import SalienceInvestigatorBot
 
 from world_core.profiles.park_profile import ParkProfile
@@ -16,7 +13,7 @@ from world_core.profiles.house_profile import HouseProfile
 class WorldState:
     """
     World container.
-    Reality exists first.
+    Physics -> perception -> accounting -> scouts
     """
 
     def __init__(self, clock):
@@ -25,11 +22,8 @@ class WorldState:
         self.places = {}
         self.agents = []
 
-        self.space = WorldSpace(seed=211, frames_per_cycle=240)
-
         self.salience_investigator = SalienceInvestigatorBot()
         self.scouts = []
-        self.surveyors = []
 
     def add_place(self, place):
         self.places[place.name] = place
@@ -41,75 +35,89 @@ class WorldState:
     def add_scout(self, scout):
         self.scouts.append(scout)
 
-    def add_surveyor(self, surveyor):
-        self.surveyors.append(surveyor)
-
     def tick(self):
-        # Global fields first
-        self.space.tick()
+        """
+        One authoritative frame:
+          1) physics (tick)
+          2) perception (observe)
+          3) accounting ingest (snapshots)
+          4) scout observe + ingest
+        """
 
-        # Agents
+        # 1) physics
         for agent in self.agents:
             if hasattr(agent, "tick"):
                 agent.tick(self.clock)
+
+        # 2) perception
+        for agent in self.agents:
             if hasattr(agent, "observe"):
                 agent.observe(self)
 
-        # Surveyors (geometry)
-        for sv in list(self.surveyors):
-            sv.observe(self)
-            if not getattr(sv, "active", True):
-                self.surveyors.remove(sv)
-
-        # Scouts (field stakeouts)
-        for sc in list(self.scouts):
-            sc.observe(self)
-            if not getattr(sc, "active", True):
-                self.scouts.remove(sc)
-
-        # Accounting ingest: world_space + everyone else
-        self.salience_investigator.ingest(self.space.snapshot())
-
-        for entity in [*self.agents, *self.surveyors, *self.scouts]:
-            if hasattr(entity, "snapshot"):
-                snap = entity.snapshot()
+        # 3) accounting ingest (agents)
+        for agent in self.agents:
+            if hasattr(agent, "snapshot"):
+                try:
+                    snap = agent.snapshot()
+                except Exception:
+                    continue
                 if isinstance(snap, dict) and "source" in snap:
                     self.salience_investigator.ingest(snap)
+
+        # 4) scouts
+        for scout in list(self.scouts):
+            scout.observe(self)
+            ss = scout.snapshot()
+            if isinstance(ss, dict) and "source" in ss:
+                self.salience_investigator.ingest(ss)
+            if not scout.active:
+                self.scouts.remove(scout)
 
 
 def build_world(clock):
     world = WorldState(clock)
 
     # Places
-    park = ParkProfile(name="Central Park", position=(5000.0, 5200.0, 0.0), trees=20)
+    park = ParkProfile(
+        name="Central Park",
+        position=(5000.0, 5200.0, 0.0),
+        trees=20,
+    )
     world.add_place(park)
 
-    house = HouseProfile(name="Family House", position=(4800.0, 5100.0, 0.0), footprint=(50, 50), floors=2)
+    house = HouseProfile(
+        name="Family House",
+        position=(4800.0, 5100.0, 0.0),
+        footprint=(50, 50),
+        floors=2,
+    )
     world.add_place(house)
 
     # Agents
     observer = ObserverBot(name="Observer-1")
     world.add_agent(observer)
 
-    walker = WalkerBot(name="Walker-1", start_xyz=house.position, world=world)
+    walker = WalkerBot(
+        name="Walker-1",
+        start_xyz=house.position,
+        world=world,
+    )
     world.add_agent(walker)
 
-    # Surveyor centered near house for now (you can later set to exact living room center)
-    surveyor = SurveyorBot(
-        name="Surveyor-house-slice",
-        center_xyz=house.position,
-        extent_m=20.0,
-        resolution_m=1.0,
-        max_frames=999999,
-    )
-    world.add_surveyor(surveyor)
+    # Scout: stake out the living room (if known)
+    # If your HouseProfile names the living room differently, set target_room_name accordingly.
+    living_room_name = None
+    if hasattr(house, "rooms"):
+        for r in house.rooms.values():
+            if getattr(r, "room_type", "") == "living_room":
+                living_room_name = getattr(r, "name", None)
 
-    # Scout stakeout: living room TV fields (50 frames)
     scout = ScoutBot(
-        name="Scout-tv-fields-211",
-        target_room_type="living_room",
-        target_object_key="tv",
-        max_frames=50,
+        name="Scout-sound-211",
+        target_room_name=living_room_name,
+        grid_size=32,
+        resolution=1.0,
+        max_frames=500,
     )
     world.add_scout(scout)
 
