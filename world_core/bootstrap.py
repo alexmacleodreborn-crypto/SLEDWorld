@@ -3,6 +3,7 @@
 from world_core.world_grid import WorldGrid
 from world_core.walker_bot import WalkerBot
 from world_core.observer_bot import ObserverBot
+from world_core.salience_investigator_bot import SalienceInvestigatorBot
 
 from world_core.profiles.park_profile import ParkProfile
 from world_core.profiles.house_profile import HouseProfile
@@ -19,6 +20,9 @@ class WorldState:
         self.grid = WorldGrid()
         self.places: dict[str, object] = {}
         self.agents: list = []
+
+        # Accounting layer
+        self.salience_investigator = SalienceInvestigatorBot()
 
     # -----------------------------------------
     # Registration
@@ -37,19 +41,29 @@ class WorldState:
 
     def tick(self):
         """
-        Advances all world agents using world time.
-        Observation is handled externally.
-        Safe even if no agents exist.
+        Advances world agents.
+        Observer → Investigator happens AFTER perception.
         """
+        observer = None
+
         for agent in self.agents:
             if hasattr(agent, "tick"):
                 agent.tick(self.clock)
+
+            if agent.__class__.__name__ == "ObserverBot":
+                observer = agent
+
+        # -------------------------------------
+        # Observer → Investigator (ACCOUNTING)
+        # -------------------------------------
+        if observer:
+            snapshot = observer.export_snapshot()
+            self.salience_investigator.ingest_observer_snapshot(snapshot)
 
 
 def build_world(clock):
     """
     Constructs the base world with places and agents.
-    World-first. Agents inhabit, not control.
     """
 
     world = WorldState(clock)
@@ -76,13 +90,13 @@ def build_world(clock):
     world.add_place(house)
 
     # -------------------------
-    # Observer Bot (PASSIVE, COGNITIVE)
+    # Observer (PERCEPTION)
     # -------------------------
     observer = ObserverBot(name="Observer-1")
     world.add_agent(observer)
 
     # -------------------------
-    # Walker Bot (AUTONOMOUS, PHYSICAL)
+    # Walker (PHYSICAL)
     # -------------------------
     walker = WalkerBot(
         name="Walker-1",
