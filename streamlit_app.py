@@ -86,7 +86,11 @@ st.caption(
 # World Grid
 # --------------------------
 st.subheader("World Grid")
-st.json(world.grid.snapshot())
+st.json({
+    "places": list(world.places.keys()),
+    "num_places": len(world.places),
+    "num_agents": len(world.agents),
+})
 
 # --------------------------
 # World Summary
