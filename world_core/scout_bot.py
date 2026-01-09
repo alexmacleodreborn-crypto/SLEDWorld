@@ -1,217 +1,100 @@
 # world_core/scout_bot.py
 
 import math
-import uuid
-from collections import defaultdict
+import numpy as np
 
 
 class ScoutBot:
     """
-    Scout Bot — Pre-concept Perception Agent
+    Focused attention agent.
 
     Purpose:
-    - Stake out a region
-    - Perceive shape, distance, and intensity
-    - Report salience WITHOUT object labels
-
-    Philosophy:
-    - No time semantics (time is a coordinate)
-    - No language
-    - No objects
-    - Shape precedes meaning
+    - Stake out a region of space
+    - Record shape, distance, intensity (light/sound later)
+    - NO interpretation
+    - NO semantics
     """
 
     def __init__(
         self,
         name: str,
         anchor_xyz,
-        radius: float = 25.0,
         grid_size: int = 16,
         resolution: float = 1.0,
+        max_frames: int = 100,
     ):
-        self.id = f"scout-{uuid.uuid4().hex[:6]}"
         self.name = name
-        self.anchor = anchor_xyz
-        self.radius = radius
+        self.anchor = tuple(anchor_xyz)
 
-        # Square-like perception
         self.grid_size = grid_size
         self.resolution = resolution
+        self.max_frames = max_frames
 
-        # Internal counters
         self.frames = 0
-        self.shape_persistence = 0
-
-        # Last perceived square (for persistence)
-        self._last_occupancy = None
-
-        # Ledger (local, before investigator)
-        self.local_log = []
-
         self.active = True
 
-    # ==================================================
-    # PERCEPTION ENTRY POINT
-    # ==================================================
+        # Shape memory (occupancy)
+        self.occupancy = np.zeros((grid_size, grid_size), dtype=int)
+        self.last_occupancy = None
+        self.shape_persistence = 0
+
+    # ------------------------------------------------
+    # OBSERVATION
+    # ------------------------------------------------
 
     def observe(self, world):
-        """
-        Called once per world tick.
-        """
         if not self.active:
             return
 
         self.frames += 1
 
-        occupancy = self._scan_occupancy(world)
-        sound_level = self._scan_sound(world)
-        light_level = self._scan_light(world)
+        if self.frames >= self.max_frames:
+            self.active = False
+            return
 
-        persistence = self._compute_persistence(occupancy)
-
-        report = {
-            "type": "scout",
-            "scout_id": self.id,
-            "name": self.name,
-            "frame": self.frames,
-            "anchor": self.anchor,
-            "grid_size": self.grid_size,
-            "resolution": self.resolution,
-            "distance_radius": self.radius,
-            "occupancy": occupancy,
-            "sound": sound_level,
-            "light": light_level,
-            "shape_persistence": persistence,
-        }
-
-        self.local_log.append(report)
-
-        # Forward to accounting layer if present
-        if hasattr(world, "salience_investigator"):
-            world.salience_investigator.ingest_scout_report(report)
-
-    # ==================================================
-    # OCCUPANCY / SHAPE
-    # ==================================================
-
-    def _scan_occupancy(self, world):
-        """
-        Produces a grid of occupancy values:
-        0 = empty
-        1 = something present
-        """
-        half = self.grid_size // 2
-        grid = [[0 for _ in range(self.grid_size)] for _ in range(self.grid_size)]
+        # Reset grid
+        grid = np.zeros((self.grid_size, self.grid_size), dtype=int)
 
         ax, ay, az = self.anchor
+        half = self.grid_size // 2
 
         for place in world.places.values():
             if not hasattr(place, "contains_world_point"):
                 continue
 
-            for ix in range(self.grid_size):
-                for iy in range(self.grid_size):
-                    dx = (ix - half) * self.resolution
-                    dy = (iy - half) * self.resolution
+            px, py, pz = place.position
+            dx = (px - ax) / self.resolution
+            dy = (py - ay) / self.resolution
 
-                    px = ax + dx
-                    py = ay + dy
-                    pz = az
+            gx = int(round(dx)) + half
+            gy = int(round(dy)) + half
 
-                    if place.contains_world_point((px, py, pz)):
-                        grid[iy][ix] = 1
+            if 0 <= gx < self.grid_size and 0 <= gy < self.grid_size:
+                grid[gy, gx] = 1
 
-        return grid
+        # Shape persistence check
+        if self.last_occupancy is not None:
+            if np.array_equal(grid, self.last_occupancy):
+                self.shape_persistence += 1
+            else:
+                self.shape_persistence = 0
 
-    # ==================================================
-    # SOUND (INTENSITY FIELD)
-    # ==================================================
+        self.last_occupancy = grid.copy()
+        self.occupancy = grid
 
-    def _scan_sound(self, world):
-        total = 0.0
-        ax, ay, az = self.anchor
-
-        for place in world.places.values():
-            if not hasattr(place, "rooms"):
-                continue
-
-            for room in place.rooms.values():
-                if not hasattr(room, "get_sound_level"):
-                    continue
-
-                source = room.get_sound_level()
-                if source <= 0:
-                    continue
-
-                cx, cy, cz = room.center_xyz()
-                d = math.dist((ax, ay, az), (cx, cy, cz))
-
-                if d <= self.radius:
-                    attenuation = max(1.0 / (d * d + 1.0), 0.02)
-                    total += source * attenuation
-
-        return round(min(total, 1.0), 3)
-
-    # ==================================================
-    # LIGHT (PLACEHOLDER FIELD)
-    # ==================================================
-
-    def _scan_light(self, world):
-        """
-        Placeholder for future light field.
-        For now: presence density proxy.
-        """
-        occupancy = self._last_occupancy or []
-        if not occupancy:
-            return 0.0
-
-        filled = sum(sum(row) for row in occupancy)
-        total = self.grid_size * self.grid_size
-
-        return round(filled / total, 3)
-
-    # ==================================================
-    # SHAPE PERSISTENCE
-    # ==================================================
-
-    def _compute_persistence(self, occupancy):
-        """
-        Detects whether shape is stable across frames.
-        """
-        if self._last_occupancy is None:
-            self._last_occupancy = occupancy
-            self.shape_persistence = 0
-            return 0
-
-        same = 0
-        total = self.grid_size * self.grid_size
-
-        for y in range(self.grid_size):
-            for x in range(self.grid_size):
-                if occupancy[y][x] == self._last_occupancy[y][x]:
-                    same += 1
-
-        similarity = same / total
-
-        if similarity > 0.9:
-            self.shape_persistence += 1
-        else:
-            self.shape_persistence = 0
-
-        self._last_occupancy = occupancy
-        return self.shape_persistence
-
-    # ==================================================
-    # OBSERVER VIEW
-    # ==================================================
+    # ------------------------------------------------
+    # SNAPSHOT
+    # ------------------------------------------------
 
     def snapshot(self):
         return {
-            "id": self.id,
+            "source": "scout",
+            "name": self.name,
             "type": "scout",
             "active": self.active,
             "frames": self.frames,
             "grid_size": self.grid_size,
             "resolution": self.resolution,
             "shape_persistence": self.shape_persistence,
+            "occupancy": self.occupancy.tolist(),
         }
