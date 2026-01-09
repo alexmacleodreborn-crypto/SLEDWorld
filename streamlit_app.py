@@ -118,6 +118,26 @@ else:
         st.json(agent.snapshot())
 
 # ==================================================
+# Observer View (Perception / Reality)
+# ==================================================
+st.subheader("Observer Perception")
+
+observer_found = False
+
+for agent in world.agents:
+    if agent.__class__.__name__ == "ObserverBot":
+        observer_found = True
+
+        st.json({
+            "observer": agent.name,
+            "frames_observed": agent.frames_observed,
+            "persistent_places": agent.seen_places,
+        })
+
+if not observer_found:
+    st.info("No observer agent present.")
+
+# ==================================================
 # Footer
 # ==================================================
 st.caption(
