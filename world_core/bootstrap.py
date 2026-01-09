@@ -5,6 +5,7 @@ from world_core.walker_bot import WalkerBot
 from world_core.observer_bot import ObserverBot
 from world_core.scout_bot import ScoutBot
 from world_core.salience_investigator_bot import SalienceInvestigatorBot
+from world_core.world_space import WorldSpace
 
 from world_core.profiles.park_profile import ParkProfile
 from world_core.profiles.house_profile import HouseProfile
@@ -14,28 +15,23 @@ class WorldState:
     """
     World container.
     Reality exists first.
-    Perception, accounting, exploration are downstream.
+    Cognition is downstream.
     """
 
     def __init__(self, clock):
         self.clock = clock
         self.grid = WorldGrid()
+        self.places = {}
+        self.agents = []
 
-        # Spatial entities
-        self.places: dict[str, object] = {}
+        # Global atmosphere/sky
+        self.space = WorldSpace(seed=211, frames_per_cycle=240)
 
-        # Agents (walker, observer, etc.)
-        self.agents: list = []
-
-        # Scouts (activated by salience)
-        self.scouts: list = []
-
-        # Accounting layer (Σ)
+        # Accounting / memory layer
         self.salience_investigator = SalienceInvestigatorBot()
 
-    # =================================================
-    # REGISTRATION
-    # =================================================
+        # Active scouts
+        self.scouts = []
 
     def add_place(self, place):
         self.places[place.name] = place
@@ -44,101 +40,51 @@ class WorldState:
     def add_agent(self, agent):
         self.agents.append(agent)
 
-    def add_scout(self, scout):
+    def add_scout(self, scout: ScoutBot):
         self.scouts.append(scout)
-
-    # =================================================
-    # WORLD TICK — SINGLE SOURCE OF TRUTH
-    # =================================================
 
     def tick(self):
         """
-        One world frame.
-
-        Order is STRICT:
-        1) Physics (movement, interaction)
-        2) Perception (observer)
-        3) Accounting (investigator)
-        4) Exploration (scouts)
+        One world frame:
+        space → physics → perception → scout stakeouts → accounting
         """
+        # 0) global fields
+        self.space.tick()
 
-        observer_snapshot = None
-
-        # ---------------------------------------------
-        # 1️⃣ Physics + perception
-        # ---------------------------------------------
+        # 1) agent physics + perception
         for agent in self.agents:
-            # Physical evolution
             if hasattr(agent, "tick"):
                 agent.tick(self.clock)
-
-            # Perceptual sampling
             if hasattr(agent, "observe"):
                 agent.observe(self)
 
-            # Capture observer output
-            if agent.__class__.__name__ == "ObserverBot":
-                observer_snapshot = agent.snapshot()
+        # 2) scouts stakeout
+        for scout in list(self.scouts):
+            scout.observe(self)
+            if not getattr(scout, "active", True):
+                self.scouts.remove(scout)
 
-        # ---------------------------------------------
-        # 2️⃣ Accounting (SALIENT MEMORY)
-        # ---------------------------------------------
-        if observer_snapshot:
-            self.salience_investigator.ingest(observer_snapshot)
+        # 3) accounting ingest (space + agents + scouts)
+        # space snapshot first
+        self.salience_investigator.ingest(self.space.snapshot())
 
-        # ---------------------------------------------
-        # 3️⃣ Scout activation + observation
-        # ---------------------------------------------
-        if self.salience_investigator.frame_counter > 0:
-            for scout in list(self.scouts):
-                scout.active = True
-                scout.observe(self)
+        for agent in self.agents:
+            if hasattr(agent, "snapshot"):
+                snap = agent.snapshot()
+                if isinstance(snap, dict) and "source" in snap:
+                    self.salience_investigator.ingest(snap)
 
-                if not scout.active:
-                    self.scouts.remove(scout)
+        for scout in self.scouts:
+            if hasattr(scout, "snapshot"):
+                snap = scout.snapshot()
+                if isinstance(snap, dict) and "source" in snap:
+                    self.salience_investigator.ingest(snap)
 
-    # =================================================
-    # OBSERVER-FACING SNAPSHOT (DEBUG / STREAMLIT)
-    # =================================================
-
-    def snapshot(self):
-        return {
-            "places": {
-                name: place.snapshot()
-                for name, place in self.places.items()
-            },
-            "agents": [
-                agent.snapshot()
-                for agent in self.agents
-                if hasattr(agent, "snapshot")
-            ],
-            "scouts": [
-                scout.snapshot()
-                for scout in self.scouts
-                if hasattr(scout, "snapshot")
-            ],
-            "salience": self.salience_investigator.snapshot(),
-        }
-
-
-# =====================================================
-# WORLD CONSTRUCTION
-# =====================================================
 
 def build_world(clock):
-    """
-    Constructs the base world with:
-    - Places
-    - Observer
-    - Walker
-    - Scout
-    """
-
     world = WorldState(clock)
 
-    # ---------------------------------------------
     # Places
-    # ---------------------------------------------
     park = ParkProfile(
         name="Central Park",
         position=(5000.0, 5200.0, 0.0),
@@ -154,15 +100,11 @@ def build_world(clock):
     )
     world.add_place(house)
 
-    # ---------------------------------------------
-    # Observer (GLOBAL PERCEPTION)
-    # ---------------------------------------------
+    # Observer (perception)
     observer = ObserverBot(name="Observer-1")
     world.add_agent(observer)
 
-    # ---------------------------------------------
-    # Walker (PHYSICAL CAUSATION)
-    # ---------------------------------------------
+    # Walker (physics)
     walker = WalkerBot(
         name="Walker-1",
         start_xyz=house.position,
@@ -170,14 +112,14 @@ def build_world(clock):
     )
     world.add_agent(walker)
 
-    # ---------------------------------------------
-    # Scout (LOCAL FIELD PROBE)
-    # ---------------------------------------------
+    # Default scout: living room stakeout (room name must match your room_profile)
+    # If your room is named like "Family House:Living Room" then set that exact string.
     scout = ScoutBot(
-        name="Scout-vision-001",
-        grid_size=16,
-        resolution=1,
-        max_frames=300,
+        name="Scout-sound-211",
+        target_room="Family House:Living Room",  # change if needed
+        target_object="tv",                      # looks for room.objects["tv"]
+        radius_m=8.0,
+        max_frames=50,
     )
     world.add_scout(scout)
 
