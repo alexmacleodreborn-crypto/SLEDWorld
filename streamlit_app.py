@@ -1,5 +1,4 @@
 import streamlit as st
-import numpy as np
 
 from world_core.bootstrap import build_world
 from world_core.world_clock import WorldClock
@@ -13,7 +12,7 @@ st.set_page_config(
 )
 
 # ==================================================
-# DEV / HARD RESET
+# HARD RESET (DEV SAFETY)
 # ==================================================
 st.sidebar.header("Dev Controls")
 
@@ -78,11 +77,11 @@ st.json({
     "places": list(world.places.keys()),
     "num_places": len(world.places),
     "num_agents": len(world.agents),
-    "num_active_scouts": len(getattr(world, "scouts", [])),
+    "num_scouts": len(getattr(world, "scouts", [])),
 })
 
 # --------------------------
-# Observer View
+# Observer Perception
 # --------------------------
 st.subheader("Observer Perception")
 
@@ -105,78 +104,22 @@ for agent in world.agents:
         st.json(agent.snapshot())
 
 # --------------------------
-# Active Scouts
+# Scouts (Focused Attention)
 # --------------------------
-st.subheader("Active Scouts (Focused Attention)")
+st.subheader("Scouts (Focused Attention)")
 
 scouts = getattr(world, "scouts", [])
 
-if scouts:
+if not scouts:
+    st.write("No active scouts.")
+else:
     for scout in scouts:
         st.json(scout.snapshot())
-else:
-    st.write("No active scouts.")
 
-# --------------------------
-# Scout Perception — Square View
-# --------------------------
-st.subheader("Scout Perception — Local Squares")
-
-if not scouts:
-    st.write("No active scouts to visualise.")
-else:
-    for scout in scouts:
-        st.markdown(f"### {scout.name} — frame {scout.frame}")
-
-        if not hasattr(scout, "sketches") or not scout.sketches:
-            st.write("No sketches yet.")
-            continue
-
-        latest = scout.sketches[-1]
-
-        colA, colB, colC = st.columns(3)
-
-        with colA:
-            st.caption("Occupancy (Shape / Outline)")
-            st.image(
-                np.array(latest["occupancy"]),
-                clamp=True,
-                use_column_width=True,
-            )
-
-        with colB:
-            st.caption("Depth (Distance)")
-            st.image(
-                np.array(latest["depth"]),
-                clamp=True,
-                use_column_width=True,
-            )
-
-        with colC:
-            st.caption("Sound Intensity")
-            st.image(
-                np.array(latest["sound"]),
-                clamp=True,
-                use_column_width=True,
-            )
-
-        # --------------------------
-        # Shape persistence metric
-        # --------------------------
-        if hasattr(scout, "compute_persistence"):
-            persistence = scout.compute_persistence()
-            if persistence is not None:
-                st.metric(
-                    "Shape Persistence (IoU)",
-                    f"{persistence:.3f}"
-                )
-            else:
-                st.write("Shape persistence: insufficient frames")
-
-# --------------------------
-# Salience Investigator
-# --------------------------
-st.subheader("Salience Investigator (Accounting Layer)")
+# ==================================================
+# Salience Investigator (STATE BINDING)
+# ==================================================
+st.subheader("Salience Investigator — State Binding")
 
 investigator = getattr(world, "salience_investigator", None)
 
@@ -188,29 +131,43 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.metric("Frames Processed", investigator.frame)
-    st.metric("Ledger Entries", len(investigator.ledger))
+    st.metric("Known Shapes", len(investigator.shape_memory))
 
 with col2:
-    st.json(investigator.snapshot())
+    st.metric("State Events", len(investigator.ledger))
 
-# --------------------------
-# Salience Ledger (Recent)
-# --------------------------
-st.subheader("Salience Ledger (Recent Entries)")
+st.json(investigator.snapshot())
 
-if investigator.ledger:
-    st.json(investigator.ledger[-10:])
+# ==================================================
+# Emergent State Transitions (STEP 2)
+# ==================================================
+st.subheader("Emergent State Transitions (Pre-Language)")
+
+if not investigator.ledger:
+    st.write("No state transitions detected yet.")
 else:
-    st.write("No salience records yet.")
+    for event in investigator.ledger[-10:]:
+        direction = event["direction"]
+        color = "🟢" if direction == "up" else "🔴"
+
+        st.markdown(
+            f"""
+            {color} **Frame {event['frame']}**  
+            Shape: `{event['shape_id']}`  
+            ΔSound: {event['state_delta']['sound']}  
+            ΔLight: {event['state_delta']['light']}  
+            Persistence: {event['persistence']}
+            """
+        )
 
 # ==================================================
 # Footer
 # ==================================================
 st.caption(
-    "World exists independently · "
+    "Reality exists independently · "
     "Walkers cause change · "
     "Observers perceive · "
-    "Scouts focus attention · "
-    "Shape precedes name · "
+    "Scouts bind structure · "
+    "States emerge before language · "
     "Time is a coordinate, not a driver"
 )
