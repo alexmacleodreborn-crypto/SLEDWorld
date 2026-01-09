@@ -79,7 +79,7 @@ class SurveyorBot:
                         ):
                             surf[z][y][x] = 1
 
-        frame = getattr(world.space, "frame_counter", self.frames)
+        frame = getattr(world, "frame", self.frames)
 
         self.volume = vol
         self.surface_volume = surf
