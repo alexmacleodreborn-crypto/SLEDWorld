@@ -1,59 +1,111 @@
 # world_core/observer_bot.py
 
-from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Any, Dict
+from typing import Dict, Any, List
 
 
 @dataclass
 class ObserverBot:
     """
     Passive perception.
-    - No physics
-    - No movement
-    - Just reads world state and emits a perception snapshot
+    Reports fields (sound/light) and stable object snapshots.
+    No semantics required.
     """
+
     name: str = "Observer-1"
     frames_observed: int = 0
-    seen_places: Dict[str, int] = field(default_factory=dict)
     last_snapshot: Dict[str, Any] = field(default_factory=dict)
 
     def observe(self, world):
         self.frames_observed += 1
+        frame = int(getattr(getattr(world, "space", None), "frame_counter", self.frames_observed))
 
-        # mark places “seen”
-        for p in world.places.values():
-            self.seen_places[p.name] = self.seen_places.get(p.name, 0) + 1
-
-        # capture environment fields (if present)
+        # Global fields
         space = getattr(world, "space", None)
         space_snap = space.snapshot() if space and hasattr(space, "snapshot") else None
 
-        # capture object summary (TV state etc)
-        objects = []
-        for place in world.places.values():
-            if hasattr(place, "rooms"):
-                for room in place.rooms.values():
-                    if hasattr(room, "objects"):
-                        for obj_name, obj in room.objects.items():
-                            # try to show TV is_on if present
-                            obj_state = {"place": place.name, "room": room.name, "name": obj_name}
-                            if hasattr(obj, "is_on"):
-                                obj_state["is_on"] = bool(getattr(obj, "is_on"))
-                            if hasattr(obj, "position"):
-                                obj_state["position"] = getattr(obj, "position")
-                            objects.append(obj_state)
+        # Field events discovered in rooms/objects
+        fields: List[dict] = []
+        objects: List[dict] = []
 
-        frame = getattr(space, "frame_counter", self.frames_observed)
+        for place in world.places.values():
+            if not hasattr(place, "rooms"):
+                continue
+
+            for room in place.rooms.values():
+                # Room-level fields
+                if hasattr(room, "get_sound_level"):
+                    try:
+                        fields.append({
+                            "type": "sound",
+                            "scope": "room",
+                            "room": room.name,
+                            "level": float(room.get_sound_level()),
+                        })
+                    except Exception:
+                        pass
+
+                if hasattr(room, "get_light_level"):
+                    try:
+                        lo = room.get_light_level()
+                        fields.append({
+                            "type": "light",
+                            "scope": "room",
+                            "room": room.name,
+                            "intensity": float(lo.get("intensity", 0.0)),
+                            "color": lo.get("color", "none"),
+                        })
+                    except Exception:
+                        pass
+
+                # Object snapshots
+                objs = getattr(room, "objects", {})
+                for obj_name, obj in objs.items():
+                    if hasattr(obj, "snapshot"):
+                        snap = obj.snapshot()
+                    else:
+                        snap = {"name": obj_name, "repr": str(obj)}
+
+                    # Add light/sound fields if present
+                    if hasattr(obj, "get_light_output"):
+                        try:
+                            ls = obj.get_light_output()
+                            fields.append({
+                                "type": "light",
+                                "scope": "object",
+                                "room": room.name,
+                                "object": obj_name,
+                                "intensity": float(ls.get("intensity", 0.0)),
+                                "color": ls.get("color", "none"),
+                            })
+                        except Exception:
+                            pass
+
+                    if hasattr(obj, "get_sound_level"):
+                        try:
+                            fields.append({
+                                "type": "sound",
+                                "scope": "object",
+                                "room": room.name,
+                                "object": obj_name,
+                                "level": float(obj.get_sound_level()),
+                            })
+                        except Exception:
+                            pass
+
+                    objects.append({
+                        "room": room.name,
+                        "object": obj_name,
+                        "snapshot": snap,
+                    })
 
         self.last_snapshot = {
             "source": "observer",
             "name": self.name,
-            "frame": int(frame),
-            "frames_observed": int(self.frames_observed),
-            "seen_places": dict(self.seen_places),
-            "world_fields": space_snap,
-            "objects_seen": objects[:50],  # cap
+            "frame": frame,
+            "world_space": space_snap,
+            "fields": fields[:200],
+            "objects": objects[:200],
         }
 
     def snapshot(self) -> Dict[str, Any]:
@@ -61,6 +113,6 @@ class ObserverBot:
             "source": "observer",
             "name": self.name,
             "frame": self.frames_observed,
-            "frames_observed": self.frames_observed,
-            "seen_places": self.seen_places,
+            "fields": [],
+            "objects": [],
         }
