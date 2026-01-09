@@ -1,22 +1,21 @@
 # world_core/surveyor_bot.py
 
+from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Dict, Tuple, Any, List
-
+from typing import Dict, Tuple, Any, List, Optional
 
 @dataclass
 class SurveyorBot:
     """
     3D geometry surveyor.
     Builds a voxel volume of solid space.
-    No cognition. No interaction.
+    Extracts surface voxels and an aerial 2D occupancy grid (1/0).
     """
-
     name: str
     center_xyz: Tuple[float, float, float]
-    extent_m: float = 10.0
-    resolution_m: float = 1.0
-    height_m: float = 6.0
+    extent_m: float = 60.0
+    resolution_m: float = 2.0
+    height_m: float = 10.0
     max_frames: int = 999999
 
     active: bool = True
@@ -24,12 +23,17 @@ class SurveyorBot:
 
     volume: List[List[List[int]]] = field(default_factory=list)
     surface_volume: List[List[List[int]]] = field(default_factory=list)
+    aerial_grid: Optional[List[List[int]]] = None
 
     last_snapshot: Dict[str, Any] = field(default_factory=dict)
 
     def _is_solid(self, world, x, y, z) -> bool:
+        # Place/room volumes are "solid shells" only in this simplified model.
+        # We treat walls as solid via room/house bounds; interior remains empty.
+        # For stage-1: we model solids as "place bounds" and "room bounds".
         for place in world.places.values():
             if hasattr(place, "contains_world_point") and place.contains_world_point((x, y, z)):
+                # IMPORTANT: if place is a room container, that's a box; we'll let builder infer interior later.
                 return True
             if hasattr(place, "rooms"):
                 for room in place.rooms.values():
@@ -79,20 +83,31 @@ class SurveyorBot:
                         ):
                             surf[z][y][x] = 1
 
-        frame = getattr(world, "frame", self.frames)
+        # Aerial occupancy: 1 if any z column has solid
+        aerial = [[0 for _ in range(nx)] for __ in range(ny)]
+        for y in range(ny):
+            for x in range(nx):
+                solid_any = 0
+                for z in range(nz):
+                    if vol[z][y][x] == 1:
+                        solid_any = 1
+                        break
+                aerial[y][x] = solid_any
 
         self.volume = vol
         self.surface_volume = surf
+        self.aerial_grid = aerial
+
         self.last_snapshot = {
             "source": "surveyor",
             "name": self.name,
-            "frame": frame,
+            "frame": getattr(world, "frame", self.frames),
             "active": self.active,
             "center_xyz": self.center_xyz,
             "resolution_m": step,
             "volume_shape": (nz, ny, nx),
-            "volume": vol,
-            "surface_volume": surf,
+            # Keep heavy arrays out of default UI if you want; but we include them for now.
+            "aerial_grid": aerial,
         }
 
     def snapshot(self) -> Dict[str, Any]:
