@@ -1,5 +1,4 @@
 import streamlit as st
-import numpy as np
 import matplotlib.pyplot as plt
 
 from world_core.bootstrap import build_world
@@ -31,7 +30,7 @@ world = st.session_state.world
 st.sidebar.header("World Advancement")
 
 advance_steps = st.sidebar.slider(
-    "Advance steps",
+    "Advance steps (minutes per click)",
     min_value=1,
     max_value=20,
     value=1,
@@ -54,9 +53,9 @@ if st.sidebar.button("Reset World"):
 # ==================================================
 st.title("SLEDWorld – Reality Frame")
 
-# --------------------------
+# --------------------------------------------------
 # World State
-# --------------------------
+# --------------------------------------------------
 st.subheader("World State")
 st.json({
     "places": list(world.places.keys()),
@@ -65,9 +64,9 @@ st.json({
     "num_scouts": len(getattr(world, "scouts", [])),
 })
 
-# --------------------------
+# --------------------------------------------------
 # World Geometry & Objects
-# --------------------------
+# --------------------------------------------------
 st.subheader("World Geometry & Objects")
 
 for place in world.places.values():
@@ -94,9 +93,9 @@ for place in world.places.values():
 
                     st.json(room_view)
 
-# --------------------------
+# --------------------------------------------------
 # Observer Perception
-# --------------------------
+# --------------------------------------------------
 st.subheader("Observer Perception")
 
 observer_found = False
@@ -108,18 +107,67 @@ for agent in world.agents:
 if not observer_found:
     st.warning("No observer present.")
 
-# --------------------------
-# World Agents
-# --------------------------
+# --------------------------------------------------
+# World Agents (Physical)
+# --------------------------------------------------
 st.subheader("World Agents")
 
 for agent in world.agents:
     if hasattr(agent, "snapshot"):
         st.json(agent.snapshot())
 
-# --------------------------
-# Salience Investigator
-# --------------------------
+# --------------------------------------------------
+# Scout Visual Perception
+# --------------------------------------------------
+st.divider()
+st.subheader("Scout Perception — Shape · Sound · Light")
+
+scouts = getattr(world, "scouts", [])
+
+if not scouts:
+    st.write("No active scouts.")
+else:
+    for scout in scouts:
+        snap = scout.snapshot()
+
+        st.markdown(f"### {scout.name}")
+        st.caption(
+            f"Frame {snap['frame']} · "
+            f"Persistence {snap['shape_persistence']} · "
+            f"Active {snap['active']}"
+        )
+
+        col1, col2, col3 = st.columns(3)
+
+        # Shape
+        with col1:
+            st.markdown("**Shape (Occupancy)**")
+            fig, ax = plt.subplots()
+            ax.imshow(scout.occupancy, cmap="gray", origin="lower")
+            ax.axis("off")
+            st.pyplot(fig)
+
+        # Sound
+        with col2:
+            st.markdown("**Sound Field**")
+            fig, ax = plt.subplots()
+            ax.imshow(scout.sound, cmap="inferno", origin="lower")
+            ax.axis("off")
+            st.pyplot(fig)
+
+        # Light
+        with col3:
+            st.markdown("**Light Field**")
+            fig, ax = plt.subplots()
+            ax.imshow(scout.light, cmap="plasma", origin="lower")
+            ax.axis("off")
+            st.pyplot(fig)
+
+        st.divider()
+
+# --------------------------------------------------
+# Salience Investigator (Accounting Layer)
+# --------------------------------------------------
 st.subheader("Salience Ledger (Accounting)")
 
 investigator = getattr(world, "salience_investigator", None)
@@ -135,79 +183,20 @@ if investigator:
         st.json(investigator.snapshot())
 
     st.subheader("Recent Salience Transactions")
-    st.json(investigator.ledger[-10:])
+    if investigator.ledger:
+        st.json(investigator.ledger[-10:])
+    else:
+        st.write("No transactions yet.")
 else:
     st.warning("No salience investigator present.")
-
-# ==================================================
-# Scout Visual Perception (NEW – THIS IS THE KEY PART)
-# ==================================================
-st.divider()
-st.subheader("Scout Perception — Shape & Sound")
-
-scouts = getattr(world, "scouts", [])
-
-if not scouts:
-    st.write("No active scouts.")
-else:
-    for scout in scouts:
-        snap = scout.snapshot()
-
-        st.markdown(f"### {scout.name}")
-        st.caption(
-            f"Frame {snap['frame']} · "
-            f"Active: {snap['active']} · "
-            f"Persistence: {snap['shape_persistence']}"
-        )
-
-        colA, colB, colC = st.columns(3)
-
-        # ------------------
-        # Shape (Occupancy)
-        # ------------------
-        with colA:
-            st.markdown("**Shape (Occupancy)**")
-            fig, ax = plt.subplots()
-            ax.imshow(
-                scout.occupancy,
-                cmap="gray",
-                origin="lower"
-            )
-            ax.set_title("Occupied Space")
-            ax.axis("off")
-            st.pyplot(fig)
-
-        # ------------------
-        # Sound Field
-        # ------------------
-        with colB:
-            st.markdown("**Sound Field**")
-            fig, ax = plt.subplots()
-            ax.imshow(
-                scout.sound,
-                cmap="inferno",
-                origin="lower"
-            )
-            ax.set_title("Sound Intensity")
-            ax.axis("off")
-            st.pyplot(fig)
-
-        # ------------------
-        # Metrics
-        # ------------------
-        with colC:
-            st.metric("Shape Persistence", snap["shape_persistence"])
-            st.metric("Occupied Cells", snap["occupancy_sum"])
-            st.metric("Sound Energy", snap["sound_sum"])
-
-        st.divider()
 
 # ==================================================
 # Footer
 # ==================================================
 st.caption(
     "Reality exists first. "
-    "Structure precedes meaning. "
-    "Change binds to shape. "
-    "Understanding emerges."
+    "Motion causes change. "
+    "Observers perceive. "
+    "Scouts resolve structure. "
+    "Meaning is not assumed."
 )
