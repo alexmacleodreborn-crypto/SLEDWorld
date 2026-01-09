@@ -1,17 +1,18 @@
-class LightSource:
-    """
-    Simple binary light emitter.
-    No cognition. No decay logic here.
-    """
+# world_core/light/light_source.py
 
-    def __init__(self, name, position, base_level=1.0):
+from __future__ import annotations
+
+class LightSource:
+    def __init__(self, name, position, base_level=0.8):
         self.name = name
         self.position = position
-        self.base_level = base_level
+        self.base_level = float(base_level)
         self.active = False
+        self.color = "red"
 
-    def set_active(self, state: bool):
-        self.active = state
+    def set_active(self, active: bool, color: str = "red"):
+        self.active = bool(active)
+        self.color = str(color)
 
-    def get_level(self):
-        return self.base_level if self.active else 0.0
+    def level(self) -> float:
+        return round(self.base_level if self.active else 0.0, 3)
