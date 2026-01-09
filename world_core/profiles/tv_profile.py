@@ -1,68 +1,76 @@
+# world_core/profiles/tv_profile.py
+
 from world_core.sound.sound_source import SoundSource
 
 
 class TVProfile:
     """
-    Physical TV-like device.
-
+    Physical device.
     - Binary state
-    - Emits sound when ON
-    - Emits light ALWAYS (red/off, green/on)
-    - No semantics
+    - Sound when ON
+    - Light ALWAYS (red when OFF, green when ON)
+    - No semantics required by bots
     """
 
     def __init__(self, name, position):
         self.name = name
         self.position = position
 
-        # Physical state
         self.is_on = False
 
-        # Sound emitter
         self.sound = SoundSource(
             name=f"{name}_sound",
             position=position,
             base_level=0.6,
         )
 
-        # Light emitter (always on, colour encodes state)
-        self.light_level = 0.8
+        # Light sensor output always present
+        self.light_intensity = 0.8
 
-    # -------------------------
-    # Interaction
-    # -------------------------
+        # Optional: a human-assigned symbol exists ONLY on the object
+        # Bots do not have to use this until evidence binds it.
+        self.symbol_hint = "TV"
+
+        # Ensure OFF state is silent
+        if hasattr(self.sound, "set_active"):
+            self.sound.set_active(False)
 
     def power_toggle(self):
         self.is_on = not self.is_on
-        self.sound.set_active(self.is_on)
-
-    # -------------------------
-    # Field outputs
-    # -------------------------
+        if hasattr(self.sound, "set_active"):
+            self.sound.set_active(self.is_on)
+        return True
 
     def get_sound_level(self) -> float:
-        return self.sound.current_level()
+        # Support multiple SoundSource implementations safely
+        if hasattr(self.sound, "current_level"):
+            try:
+                return float(self.sound.current_level())
+            except Exception:
+                return 0.0
+        if hasattr(self.sound, "level"):
+            try:
+                return float(self.sound.level)
+            except Exception:
+                return 0.0
+        # If we can’t read, infer
+        return 0.6 if self.is_on else 0.0
 
     def get_light_output(self) -> dict:
-        """
-        Light is ALWAYS emitted.
-        Colour encodes state.
-        """
         return {
-            "intensity": self.light_level,
+            "intensity": float(self.light_intensity),
             "color": "green" if self.is_on else "red",
         }
-
-    # -------------------------
-    # Observer snapshot
-    # -------------------------
 
     def snapshot(self):
         return {
             "type": "device",
+            "device_kind": "screen_emitter",
             "name": self.name,
             "position": self.position,
-            "state": "on" if self.is_on else "off",
-            "sound_level": self.get_sound_level(),
+            "is_on": bool(self.is_on),
+            "sound_level": round(self.get_sound_level(), 3),
             "light": self.get_light_output(),
+            # hint exists but should be ignored by most bots until bound
+            "symbol_hint": self.symbol_hint,
         }
