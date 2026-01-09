@@ -1,133 +1,66 @@
 # world_core/observer_bot.py
 
-import math
-
+from __future__ import annotations
+from typing import Dict, Any
 
 class ObserverBot:
     """
-    Passive perception bot.
-    No physics. No interaction.
-    It "observes" the world each frame and reports signals.
-
-    Strategy:
-      - Anchor perception around Walker position (if present)
-      - Resolve room/place from that position
-      - Read room signals (light + sound) and report them
+    Global perception aggregator.
+    - Sees object state
+    - Sees light + hears sound (via room/object snapshots)
+    - Records changes (diffs) between frames
     """
-
-    def __init__(self, name: str = "Observer-1"):
+    def __init__(self, name: str):
         self.name = name
-        self.frames_observed = 0
-
-        self.current_area = "world"
-        self.current_bounds = None
-
-        self.heard_sound_level = 0.0
-        self.seen_light = {"intensity": 0.0, "color": "none"}
-
-        self.seen_places = {}
-        self.ledger = []
-
-    def _distance(self, a, b):
-        return math.sqrt((a[0]-b[0])**2 + (a[1]-b[1])**2 + (a[2]-b[2])**2)
+        self._last_seen: Dict[str, Any] = {}
+        self._last_snapshot: Dict[str, Any] = {}
+        self._frame = 0
 
     def observe(self, world):
-        self.frames_observed += 1
+        self._frame = world.frame
 
-        walker_pos = None
-        for a in getattr(world, "agents", []):
-            if a.__class__.__name__ == "WalkerBot":
-                walker_pos = tuple(getattr(a, "position", (0.0, 0.0, 0.0)))
-                break
+        seen = {}
+        events = []
 
-        # Fallback: observer just "sees" all places
-        places = getattr(world, "places", {}) or {}
-        for pname in places.keys():
-            self.seen_places[pname] = self.seen_places.get(pname, 0) + 1
+        # gather objects of interest: tv in any room
+        for place in world.places.values():
+            if hasattr(place, "rooms"):
+                for room in place.rooms.values():
+                    for obj_name, obj in room.objects.items():
+                        if hasattr(obj, "snapshot"):
+                            o = obj.snapshot()
+                        else:
+                            o = {"name": getattr(obj, "name", obj_name)}
+                        key = f"{room.name}:{obj_name}"
+                        seen[key] = o
 
-        self.current_area = "world"
-        self.current_bounds = None
-        self.heard_sound_level = 0.0
-        self.seen_light = {"intensity": 0.0, "color": "none"}
+        # diff
+        for key, now in seen.items():
+            prev = self._last_seen.get(key)
+            if prev is None:
+                events.append({"type": "appear", "key": key})
+            else:
+                # compare some known fields if present
+                for field in ("is_on", "light_color", "sound_level", "light_level"):
+                    if field in now and field in prev and now[field] != prev[field]:
+                        events.append({"type": "change", "key": key, "field": field, "from": prev[field], "to": now[field]})
 
-        # If we have walker position, resolve current room/place and read signals
-        if walker_pos is not None:
-            # Try rooms first
-            for place in places.values():
-                rooms = getattr(place, "rooms", None)
-                if not rooms:
-                    continue
-                for room in rooms.values():
-                    if hasattr(room, "contains_world_point") and room.contains_world_point(walker_pos):
-                        self.current_area = getattr(room, "name", "room")
-                        self.current_bounds = getattr(room, "bounds", None)
+        self._last_seen = seen
 
-                        rs = room.snapshot()
-                        sig = rs.get("signals", {})
-                        self.heard_sound_level = float(sig.get("sound", 0.0) or 0.0)
-                        self.seen_light = sig.get("light") or {"intensity": 0.0, "color": "none"}
-
-                        self.ledger.append({
-                            "frame": self.frames_observed,
-                            "event": "observe_room",
-                            "area": self.current_area,
-                            "sound": round(self.heard_sound_level, 3),
-                            "light": self.seen_light,
-                        })
-                        return
-
-            # Else resolve place
-            for place in places.values():
-                if hasattr(place, "contains_world_point") and place.contains_world_point(walker_pos):
-                    self.current_area = getattr(place, "name", "place")
-                    self.current_bounds = getattr(place, "bounds", None)
-
-                    # Place signal fallback: compute from rooms if any
-                    sound = 0.0
-                    best_light = {"intensity": 0.0, "color": "none"}
-                    rooms = getattr(place, "rooms", None)
-                    if rooms:
-                        for room in rooms.values():
-                            rs = room.snapshot()
-                            sig = rs.get("signals", {})
-                            sound += float(sig.get("sound", 0.0) or 0.0)
-                            lt = sig.get("light") or {"intensity": 0.0, "color": "none"}
-                            if float(lt.get("intensity", 0.0) or 0.0) > float(best_light.get("intensity", 0.0) or 0.0):
-                                best_light = lt
-
-                    self.heard_sound_level = min(sound, 1.0)
-                    self.seen_light = best_light
-
-                    self.ledger.append({
-                        "frame": self.frames_observed,
-                        "event": "observe_place",
-                        "area": self.current_area,
-                        "sound": round(self.heard_sound_level, 3),
-                        "light": self.seen_light,
-                    })
-                    return
-
-        # Global fallback
-        self.ledger.append({
-            "frame": self.frames_observed,
-            "event": "observe_world",
-            "area": self.current_area,
-            "sound": 0.0,
-            "light": {"intensity": 0.0, "color": "none"},
-        })
-
-    def snapshot(self):
-        return {
+        self._last_snapshot = {
             "source": "observer",
-            "type": "observer",
             "name": self.name,
-            "frame": self.frames_observed,
-            "current_area": self.current_area,
-            "bounds": self.current_bounds,
-            "signals": {
-                "sound": round(self.heard_sound_level, 3),
-                "light": self.seen_light,
-            },
-            "seen_places": dict(self.seen_places),
-            "ledger_tail": self.ledger[-10:],
+            "frame": self._frame,
+            "events": events,
+            "seen_objects": seen,
+            "world_space": world.space.snapshot(),
+        }
+
+    def snapshot(self) -> Dict[str, Any]:
+        return self._last_snapshot or {
+            "source": "observer",
+            "name": self.name,
+            "frame": self._frame,
+            "events": [],
+            "seen_objects": {},
         }
