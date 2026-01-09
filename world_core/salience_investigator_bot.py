@@ -1,61 +1,65 @@
-# world_core/salience_investigator_bot.py
-
 class SalienceInvestigatorBot:
     """
-    Accounting / memory layer.
-    Does not perceive directly.
-    Receives structured reports from other agents.
+    Integrates observer reports into certainty fields.
+    This is where structure becomes real.
     """
 
     def __init__(self):
-        # Frame counter = how many world frames processed
         self.frame_counter = 0
 
-        # Ledger of all ingested reports
+        # Raw history
         self.ledger = []
 
-        # Simple tallies (expand later)
-        self.sources_seen = {}
-        self.event_counts = {}
+        # Accumulated certainty
+        self.room_certainty = {}
 
     # =================================================
-    # INGESTION
+    # INGEST RAW REPORT
     # =================================================
 
     def ingest(self, snapshot: dict):
-        """
-        Accepts a snapshot from any agent.
-        Snapshot MUST contain 'source'.
-        """
-
-        if not isinstance(snapshot, dict):
-            return
-
-        source = snapshot.get("source", "unknown")
-
-        # Frame advances when ANY snapshot is ingested
         self.frame_counter += 1
-
-        # Track sources
-        self.sources_seen[source] = self.sources_seen.get(source, 0) + 1
-
-        # Track events if present
-        event = snapshot.get("event")
-        if event:
-            self.event_counts[event] = self.event_counts.get(event, 0) + 1
-
-        # Store full snapshot (append-only memory)
         self.ledger.append(snapshot)
 
+        for room in snapshot.get("rooms", []):
+            name = room["room"]
+
+            if name not in self.room_certainty:
+                self.room_certainty[name] = {
+                    "sound_sum": 0.0,
+                    "light_sum": 0.0,
+                    "frames_seen": 0,
+                }
+
+            entry = self.room_certainty[name]
+            entry["sound_sum"] += room.get("sound_level", 0.0)
+            entry["light_sum"] += room.get("light_level", 0.0)
+            entry["frames_seen"] += 1
+
     # =================================================
-    # OBSERVER VIEW
+    # DERIVED CERTAINTY (THIS IS WHAT SCOUT USES)
+    # =================================================
+
+    def get_room_signatures(self):
+        signatures = {}
+
+        for room, data in self.room_certainty.items():
+            frames = max(data["frames_seen"], 1)
+
+            signatures[room] = {
+                "sound_signature": round(data["sound_sum"] / frames, 3),
+                "light_signature": round(data["light_sum"] / frames, 3),
+                "certainty": frames,
+            }
+
+        return signatures
+
+    # =================================================
+    # SNAPSHOT (FOR STREAMLIT)
     # =================================================
 
     def snapshot(self):
         return {
-            "type": "salience_investigator",
             "frames_processed": self.frame_counter,
-            "total_transactions": len(self.ledger),
-            "sources_seen": self.sources_seen,
-            "event_counts": self.event_counts,
+            "rooms": self.get_room_signatures(),
         }
