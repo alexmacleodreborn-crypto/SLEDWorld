@@ -9,17 +9,13 @@ class ScoutBot:
     """
     Salience scout.
 
-    Purpose:
-    - Monitor ONE feature stream (sound / light / shape)
-    - Detect change vs persistence
-    - Report to ledger
-    - No cognition
-    - No interaction
+    Monitors ONE feature stream (sound / light / shape).
+    Reports persistence and change.
     """
 
     name: str
-    focus: str                    # "sound", "light", "shape"
-    target: Optional[str] = None  # e.g. "tv", "room:living_room"
+    focus: str = "shape"          # sound | light | shape
+    target: Optional[str] = None
     max_frames: int = 200
 
     active: bool = True
@@ -29,6 +25,23 @@ class ScoutBot:
     persistence: int = 0
 
     last_snapshot: Dict[str, Any] = field(default_factory=dict)
+
+    # =================================================
+    # COMPATIBILITY LAYER (IMPORTANT)
+    # =================================================
+    def __init__(self, name: str, **kwargs):
+        self.name = name
+
+        # Accept ANY future parameters safely
+        self.focus = kwargs.get("focus", "shape")
+        self.target = kwargs.get("target", None)
+        self.max_frames = int(kwargs.get("max_frames", 200))
+
+        self.active = True
+        self.frames = 0
+        self.last_value = None
+        self.persistence = 0
+        self.last_snapshot = {}
 
     # =================================================
     # Observation
@@ -44,7 +57,6 @@ class ScoutBot:
             return
 
         value = self._extract_value(world)
-
         if value is None:
             return
 
@@ -74,42 +86,25 @@ class ScoutBot:
     # =================================================
 
     def _extract_value(self, world):
-        """
-        Pull the focused feature from the world.
-        """
-
-        # ------------------------------
-        # SOUND
-        # ------------------------------
         if self.focus == "sound":
             total = 0.0
             for place in world.places.values():
                 if hasattr(place, "rooms"):
                     for room in place.rooms.values():
-                        if self.target and self.target not in room.name:
-                            continue
                         if hasattr(room, "get_sound_level"):
                             total += room.get_sound_level()
             return round(total, 3)
 
-        # ------------------------------
-        # LIGHT
-        # ------------------------------
         if self.focus == "light":
             total = 0.0
             for place in world.places.values():
                 if hasattr(place, "rooms"):
                     for room in place.rooms.values():
-                        if self.target and self.target not in room.name:
-                            continue
                         for obj in room.objects.values():
                             if hasattr(obj, "light"):
                                 total += obj.light.level()
             return round(total, 3)
 
-        # ------------------------------
-        # SHAPE (binary occupancy)
-        # ------------------------------
         if self.focus == "shape":
             count = 0
             for place in world.places.values():
