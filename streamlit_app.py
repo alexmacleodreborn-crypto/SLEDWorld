@@ -12,6 +12,15 @@ st.set_page_config(
 )
 
 # ==================================================
+# DEV / HARD RESET
+# ==================================================
+st.sidebar.header("Dev Controls")
+
+if st.sidebar.button("🔄 HARD RESET WORLD"):
+    st.session_state.clear()
+    st.rerun()
+
+# ==================================================
 # Session initialisation
 # ==================================================
 if "clock" not in st.session_state:
@@ -29,28 +38,27 @@ world = st.session_state.world
 st.sidebar.header("World Advancement")
 
 advance_steps = st.sidebar.slider(
-    "Advance steps",
+    "Advance frames",
     min_value=1,
-    max_value=10,
+    max_value=50,
+    value=5,
+)
+
+minutes_per_step = st.sidebar.slider(
+    "Minutes per frame",
+    min_value=1,
+    max_value=60,
     value=1,
 )
 
 if st.sidebar.button("▶ Advance World"):
     for _ in range(advance_steps):
-        # Advance time deliberately (minutes)
-        clock.tick(minutes=1)
-
-        # Advance world physics
+        clock.tick(minutes=minutes_per_step)
         world.tick()
-
-        # Let observers perceive
-        for agent in world.agents:
-            if hasattr(agent, "observe"):
-                agent.observe(world)
 
 st.sidebar.divider()
 
-if st.sidebar.button("Reset World"):
+if st.sidebar.button("Reset World (soft)"):
     st.session_state.pop("world", None)
     st.session_state.pop("clock", None)
     st.rerun()
@@ -64,14 +72,16 @@ st.title("SLEDWorld – Reality Frame")
 # World State
 # --------------------------
 st.subheader("World State")
+
 st.json({
     "places": list(world.places.keys()),
     "num_places": len(world.places),
     "num_agents": len(world.agents),
+    "num_active_scouts": len(getattr(world, "scouts", [])),
 })
 
 # --------------------------
-# Observer View (PRIMARY)
+# Observer View
 # --------------------------
 st.subheader("Observer Perception")
 
@@ -83,20 +93,34 @@ for agent in world.agents:
         st.json(agent.snapshot())
 
 if not observer_found:
-    st.warning("No observation agent present.")
+    st.warning("No observer present in this world.")
 
 # --------------------------
-# World Agents (Secondary)
+# Physical Agents (Walkers)
 # --------------------------
-st.subheader("World Agents")
+st.subheader("Physical Agents")
 
 for agent in world.agents:
-    st.json(agent.snapshot())
+    if hasattr(agent, "tick") and not hasattr(agent, "observe"):
+        st.json(agent.snapshot())
+
+# --------------------------
+# Active Scouts (Focused Attention)
+# --------------------------
+st.subheader("Active Scouts")
+
+scouts = getattr(world, "scouts", [])
+
+if scouts:
+    for scout in scouts:
+        st.json(scout.snapshot())
+else:
+    st.write("No active scouts.")
 
 # --------------------------
 # Salience Investigator (Accounting Layer)
 # --------------------------
-st.subheader("Salience Ledger (Accounting)")
+st.subheader("Salience Investigator")
 
 investigator = getattr(world, "salience_investigator", None)
 
@@ -107,28 +131,30 @@ if investigator is None:
 col1, col2 = st.columns(2)
 
 with col1:
-    st.metric("Frames Processed", investigator.frame_counter)
-    st.metric("Total Transactions", len(investigator.ledger))
+    st.metric("Frames Processed", investigator.frame)
+    st.metric("Ledger Entries", len(investigator.ledger))
 
 with col2:
     st.json(investigator.snapshot())
 
 # --------------------------
-# Transaction Log (Tail)
+# Salience Ledger (Tail)
 # --------------------------
-st.subheader("Recent Salience Transactions")
+st.subheader("Salience Ledger (Recent)")
 
 if investigator.ledger:
     st.json(investigator.ledger[-10:])
 else:
-    st.write("No salience transactions recorded yet.")
+    st.write("No salience records yet.")
 
 # ==================================================
 # Footer
 # ==================================================
 st.caption(
-    "Reality persists independently. "
-    "Observers perceive. "
-    "Salience is accounted. "
-    "Time is subordinate."
+    "World exists independently · "
+    "Walkers cause change · "
+    "Observers perceive · "
+    "Scouts focus attention · "
+    "Salience is accounted · "
+    "Time is a coordinate, not a driver"
 )
