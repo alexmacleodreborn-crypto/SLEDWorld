@@ -12,21 +12,22 @@ st.set_page_config(
 )
 
 # ==================================================
-# Session initialisation
+# Session initialisation (ORDER MATTERS)
 # ==================================================
 if "clock" not in st.session_state:
-    # Clock is now observational, not causal
+    # Clock exists, but is no longer the driver
     st.session_state.clock = WorldClock(acceleration=1)
 
 clock = st.session_state.clock
 
 if "world" not in st.session_state:
+    # Build world once, bound to clock
     st.session_state.world = build_world(clock)
 
 world = st.session_state.world
 
 # ==================================================
-# Sidebar – World Advancement
+# Sidebar – World Advancement (Change-driven)
 # ==================================================
 st.sidebar.header("World Advancement")
 
@@ -42,23 +43,27 @@ advance_reason = st.sidebar.selectbox(
 
 advance_steps = st.sidebar.slider(
     "Advance intensity",
-    1, 5, 1
+    min_value=1,
+    max_value=5,
+    value=1,
 )
 
 if st.sidebar.button("▶ Advance World"):
     for _ in range(advance_steps):
+        # ------------------------------------------
+        # TEMP REALITY BRIDGE
+        # ------------------------------------------
+        # World currently advances via tick()
+        # We treat this as a meaningful change event
         world.tick()
+
+        # Annotate clock only as a record
         clock.annotate(event=advance_reason)
 
-        # Only tick clock if something actually changed
-        if changed:
-            clock.annotate(event=advance_reason)
-
 st.sidebar.divider()
-
 st.sidebar.caption(
-    "World advances only when change occurs.\n"
-    "Time is recorded, not enforced."
+    "World advances via change, not scheduled time.\n"
+    "Clock records events only."
 )
 
 # ==================================================
@@ -71,40 +76,26 @@ st.title("SLEDWorld – Reality Frame")
 # --------------------------
 st.subheader("World State")
 st.json({
-    "places": list(world.places.keys()),
     "num_places": len(world.places),
+    "place_names": list(world.places.keys()),
     "num_agents": len(world.agents),
 })
 
 # --------------------------
-# World Time (Secondary)
+# World Time (Derived / Secondary)
 # --------------------------
 st.subheader("World Time (Derived)")
 st.json(clock.snapshot())
 
 st.caption(
-    "World time is a record of change, not a driver."
+    "Time is derived from change events, not a driver of reality."
 )
 
 # --------------------------
 # World Grid
 # --------------------------
 st.subheader("World Grid")
-st.json({
-    "places": list(world.places.keys()),
-    "num_places": len(world.places),
-    "num_agents": len(world.agents),
-})
-
-# --------------------------
-# World Summary
-# --------------------------
-st.subheader("World Summary")
-st.json({
-    "num_places": len(world.places),
-    "place_names": list(world.places.keys()),
-    "num_agents": len(world.agents),
-})
+st.json(world.grid.snapshot())
 
 # --------------------------
 # World Places
@@ -130,6 +121,6 @@ else:
 # Footer
 # ==================================================
 st.caption(
-    "This view represents the objective world frame. "
-    "Reality progresses via change, not scheduled time."
+    "This view represents the objective world frame.\n"
+    "Agents and systems must adapt to the world as it persists."
 )
