@@ -1,34 +1,36 @@
 # world_core/surveyor_bot.py
 
 from dataclasses import dataclass, field
-from typing import Dict, Tuple, Any
+from typing import Dict, Tuple, Any, List
 
 
 @dataclass
 class SurveyorBot:
     """
-    Geometry surveyor (2D slice, surface edges).
-    No semantics, no interaction.
+    3D geometry surveyor.
+    Builds a voxel volume of solid space.
+    No cognition. No interaction.
     """
 
     name: str
     center_xyz: Tuple[float, float, float]
-    extent_m: float = 6.0
-    resolution_m: float = 0.5
-    max_frames: int = 50
+    extent_m: float = 10.0
+    resolution_m: float = 1.0
+    height_m: float = 6.0
+    max_frames: int = 999999
 
     active: bool = True
     frames: int = 0
 
-    occupancy_grid: list = field(default_factory=list)
-    surface_grid: list = field(default_factory=list)
+    volume: List[List[List[int]]] = field(default_factory=list)
+    surface_volume: List[List[List[int]]] = field(default_factory=list)
+
     last_snapshot: Dict[str, Any] = field(default_factory=dict)
 
     def _is_solid(self, world, x, y, z) -> bool:
         for place in world.places.values():
             if hasattr(place, "contains_world_point") and place.contains_world_point((x, y, z)):
                 return True
-
             if hasattr(place, "rooms"):
                 for room in place.rooms.values():
                     if room.contains_world_point((x, y, z)):
@@ -45,44 +47,58 @@ class SurveyorBot:
             return
 
         cx, cy, cz = self.center_xyz
-        r = float(self.extent_m)
-        step = float(self.resolution_m)
+        r = self.extent_m
+        step = self.resolution_m
+        h = self.height_m
 
-        size = int((2 * r) / step)
-        occ = [[0 for _ in range(size)] for __ in range(size)]
+        nx = int((2 * r) / step)
+        ny = nx
+        nz = int(h / step)
 
-        for ix in range(size):
-            for iy in range(size):
-                x = cx - r + ix * step
+        vol = [[[0 for _ in range(nx)] for __ in range(ny)] for ___ in range(nz)]
+
+        for iz in range(nz):
+            z = cz + iz * step
+            for iy in range(ny):
                 y = cy - r + iy * step
-                z = cz
-                if self._is_solid(world, x, y, z):
-                    occ[iy][ix] = 1
+                for ix in range(nx):
+                    x = cx - r + ix * step
+                    if self._is_solid(world, x, y, z):
+                        vol[iz][iy][ix] = 1
 
-        surf = [[0 for _ in range(size)] for __ in range(size)]
-        for y in range(1, size - 1):
-            for x in range(1, size - 1):
-                if occ[y][x] == 1 and (
-                    occ[y - 1][x] == 0 or occ[y + 1][x] == 0 or occ[y][x - 1] == 0 or occ[y][x + 1] == 0
-                ):
-                    surf[y][x] = 1
+        # Surface extraction
+        surf = [[[0 for _ in range(nx)] for __ in range(ny)] for ___ in range(nz)]
+        for z in range(1, nz - 1):
+            for y in range(1, ny - 1):
+                for x in range(1, nx - 1):
+                    if vol[z][y][x] == 1:
+                        if (
+                            vol[z-1][y][x] == 0 or vol[z+1][y][x] == 0 or
+                            vol[z][y-1][x] == 0 or vol[z][y+1][x] == 0 or
+                            vol[z][y][x-1] == 0 or vol[z][y][x+1] == 0
+                        ):
+                            surf[z][y][x] = 1
 
-        frame = int(getattr(getattr(world, "space", None), "frame_counter", self.frames))
+        frame = getattr(world.space, "frame_counter", self.frames)
 
-        self.occupancy_grid = occ
-        self.surface_grid = surf
+        self.volume = vol
+        self.surface_volume = surf
         self.last_snapshot = {
             "source": "surveyor",
             "name": self.name,
             "frame": frame,
             "active": self.active,
             "center_xyz": self.center_xyz,
-            "extent_m": self.extent_m,
-            "resolution_m": self.resolution_m,
-            "grid_size": size,
-            "occupancy_grid": occ,
-            "surface_grid": surf,
+            "resolution_m": step,
+            "volume_shape": (nz, ny, nx),
+            "volume": vol,
+            "surface_volume": surf,
         }
 
     def snapshot(self) -> Dict[str, Any]:
-        return self.last_snapshot or {"source": "surveyor", "name": self.name, "active": self.active}
+        return self.last_snapshot or {
+            "source": "surveyor",
+            "name": self.name,
+            "active": self.active,
+            "frame": self.frames,
+        }
