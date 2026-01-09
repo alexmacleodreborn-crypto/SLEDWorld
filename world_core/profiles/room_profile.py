@@ -52,7 +52,7 @@ class RoomProfile(WorldObject):
         self.floor = int(floor)
         self.room_type = str(room_type)
 
-        # Canonical semantic label
+        # Canonical semantic label (observer-only, not cognition)
         self.label = f"room:{self.room_type}"
 
         # -----------------------------------------
@@ -113,7 +113,7 @@ class RoomProfile(WorldObject):
         )
 
     # =================================================
-    # Environmental outputs
+    # Environmental outputs (ENERGY, NOT MEANING)
     # =================================================
 
     def get_sound_level(self) -> float:
@@ -123,8 +123,15 @@ class RoomProfile(WorldObject):
                 total += obj.sound_level()
         return round(min(total, 1.0), 2)
 
+    def get_light_level(self) -> float:
+        total = 0.0
+        for obj in self.objects.values():
+            if hasattr(obj, "light_level"):
+                total += obj.light_level()
+        return round(min(total, 1.0), 2)
+
     # =================================================
-    # Interaction surface (FIXED INDENTATION)
+    # Interaction surface
     # =================================================
 
     def interact(self, object_name: str, action: str) -> bool:
@@ -141,7 +148,7 @@ class RoomProfile(WorldObject):
         return False
 
     # =================================================
-    # Observer snapshot
+    # Observer snapshot (STRUCTURAL ONLY)
     # =================================================
 
     def snapshot(self):
@@ -153,6 +160,7 @@ class RoomProfile(WorldObject):
             "floor": self.floor,
             "size": self.size,
             "sound_level": self.get_sound_level(),
+            "light_level": self.get_light_level(),
             "objects": {
                 name: obj.snapshot()
                 for name, obj in self.objects.items()
