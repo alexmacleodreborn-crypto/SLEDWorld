@@ -12,15 +12,6 @@ st.set_page_config(
 )
 
 # ==================================================
-# HARD RESET (DEV SAFETY)
-# ==================================================
-st.sidebar.header("Dev Controls")
-
-if st.sidebar.button("🔄 HARD RESET WORLD"):
-    st.session_state.clear()
-    st.rerun()
-
-# ==================================================
 # Session initialisation
 # ==================================================
 if "clock" not in st.session_state:
@@ -38,27 +29,20 @@ world = st.session_state.world
 st.sidebar.header("World Advancement")
 
 advance_steps = st.sidebar.slider(
-    "Advance frames",
+    "Advance steps",
     min_value=1,
-    max_value=50,
-    value=5,
-)
-
-minutes_per_step = st.sidebar.slider(
-    "Minutes per frame",
-    min_value=1,
-    max_value=60,
+    max_value=20,
     value=1,
 )
 
 if st.sidebar.button("▶ Advance World"):
     for _ in range(advance_steps):
-        clock.tick(minutes=minutes_per_step)
+        clock.tick(minutes=1)
         world.tick()
 
 st.sidebar.divider()
 
-if st.sidebar.button("Reset World (soft)"):
+if st.sidebar.button("Reset World"):
     st.session_state.pop("world", None)
     st.session_state.pop("clock", None)
     st.rerun()
@@ -72,13 +56,40 @@ st.title("SLEDWorld – Reality Frame")
 # World State
 # --------------------------
 st.subheader("World State")
-
 st.json({
     "places": list(world.places.keys()),
     "num_places": len(world.places),
     "num_agents": len(world.agents),
-    "num_scouts": len(getattr(world, "scouts", [])),
 })
+
+# --------------------------
+# World Geometry & Objects
+# --------------------------
+st.subheader("World Geometry & Objects")
+
+for place in world.places.values():
+    with st.expander(f"Place: {place.name}", expanded=False):
+        st.json({
+            "position": getattr(place, "position", None),
+            "bounds": getattr(place, "bounds", None),
+        })
+
+        if hasattr(place, "rooms"):
+            for room in place.rooms.values():
+                with st.expander(f"Room: {room.name}", expanded=False):
+                    room_view = {
+                        "bounds": getattr(room, "bounds", None),
+                        "objects": {},
+                    }
+
+                    if hasattr(room, "objects"):
+                        for obj_name, obj in room.objects.items():
+                            if hasattr(obj, "snapshot"):
+                                room_view["objects"][obj_name] = obj.snapshot()
+                            else:
+                                room_view["objects"][obj_name] = str(obj)
+
+                    st.json(room_view)
 
 # --------------------------
 # Observer Perception
@@ -87,87 +98,50 @@ st.subheader("Observer Perception")
 
 observer_found = False
 for agent in world.agents:
-    if hasattr(agent, "observe") and hasattr(agent, "snapshot"):
+    if agent.__class__.__name__ == "ObserverBot":
         observer_found = True
         st.json(agent.snapshot())
 
 if not observer_found:
-    st.warning("No observer present in this world.")
+    st.warning("No observer present.")
 
 # --------------------------
-# Physical Agents (Walkers)
+# World Agents
 # --------------------------
-st.subheader("Physical Agents")
+st.subheader("World Agents")
 
 for agent in world.agents:
-    if hasattr(agent, "tick") and hasattr(agent, "snapshot") and not hasattr(agent, "observe"):
+    if hasattr(agent, "snapshot"):
         st.json(agent.snapshot())
 
 # --------------------------
-# Scouts (Focused Attention)
+# Salience Investigator
 # --------------------------
-st.subheader("Scouts (Focused Attention)")
-
-scouts = getattr(world, "scouts", [])
-
-if not scouts:
-    st.write("No active scouts.")
-else:
-    for scout in scouts:
-        st.json(scout.snapshot())
-
-# ==================================================
-# Salience Investigator (STATE BINDING)
-# ==================================================
-st.subheader("Salience Investigator — State Binding")
+st.subheader("Salience Ledger (Accounting)")
 
 investigator = getattr(world, "salience_investigator", None)
 
-if investigator is None:
-    st.warning("Salience Investigator not present in this world instance.")
-    st.stop()
+if investigator:
+    col1, col2 = st.columns(2)
 
-col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Frames Processed", investigator.frame_counter)
+        st.metric("Total Transactions", len(investigator.ledger))
 
-with col1:
-    st.metric("Frames Processed", investigator.frame)
-    st.metric("Known Shapes", len(investigator.shape_memory))
+    with col2:
+        st.json(investigator.snapshot())
 
-with col2:
-    st.metric("State Events", len(investigator.ledger))
-
-st.json(investigator.snapshot())
-
-# ==================================================
-# Emergent State Transitions (STEP 2)
-# ==================================================
-st.subheader("Emergent State Transitions (Pre-Language)")
-
-if not investigator.ledger:
-    st.write("No state transitions detected yet.")
+    st.subheader("Recent Salience Transactions")
+    st.json(investigator.ledger[-10:])
 else:
-    for event in investigator.ledger[-10:]:
-        direction = event["direction"]
-        color = "🟢" if direction == "up" else "🔴"
-
-        st.markdown(
-            f"""
-            {color} **Frame {event['frame']}**  
-            Shape: `{event['shape_id']}`  
-            ΔSound: {event['state_delta']['sound']}  
-            ΔLight: {event['state_delta']['light']}  
-            Persistence: {event['persistence']}
-            """
-        )
+    st.warning("No salience investigator present.")
 
 # ==================================================
 # Footer
 # ==================================================
 st.caption(
-    "Reality exists independently · "
-    "Walkers cause change · "
-    "Observers perceive · "
-    "Scouts bind structure · "
-    "States emerge before language · "
-    "Time is a coordinate, not a driver"
+    "Reality exists first. "
+    "Motion causes change. "
+    "Observers perceive. "
+    "Meaning emerges."
 )
