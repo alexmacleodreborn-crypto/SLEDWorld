@@ -79,10 +79,8 @@ def build_world(clock):
     # -------------------------
     # Observer Bot (PASSIVE, COGNITIVE)
     # -------------------------
-    observer = ObserverBot(
-        name="Observer-1"
-    )
-    world.add_agent(observer)
+    observer = ObserverBot(name="Observer-1")
+world.add_agent(observer)
 
     # -------------------------
     # Walker Bot (AUTONOMOUS, PHYSICAL)
