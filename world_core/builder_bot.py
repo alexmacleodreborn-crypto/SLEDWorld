@@ -1,90 +1,55 @@
 # world_core/builder_bot.py
 
 from __future__ import annotations
-from dataclasses import dataclass, field
 from typing import Dict, Any, List
-import math
+import numpy as np
 
-
-@dataclass
 class BuilderBot:
     """
-    Builder = validation only.
-    Takes Architect proposals + Surveyor geometry summary and produces validation scores.
-    Does NOT modify the world.
-
-    Output is used by the Ledger to promote symbols.
+    Validates architect proposals against surveyor geometry.
+    Confirms only when evidence supports it.
     """
+    def validate(self, proposals: List[Dict[str, Any]], ledger, surveyor) -> List[Dict[str, Any]]:
+        out: List[Dict[str, Any]] = []
 
-    name: str = "Builder-1"
-    validations: List[Dict[str, Any]] = field(default_factory=list)
-    frame: int = 0
+        surv = surveyor.snapshot()
+        aerial = surv.get("aerial_grid") if isinstance(surv, dict) else None
 
-    def validate(self, frame: int, proposals: List[Dict[str, Any]], geom: Dict[str, Any]) -> List[Dict[str, Any]]:
-        self.frame = frame
-        self.validations = []
+        for p in proposals:
+            prop = p.get("proposal")
 
-        planes = geom.get("planes", {})
-        x_planes = {p["coord"]: p for p in planes.get("x", [])}
-        y_planes = {p["coord"]: p for p in planes.get("y", [])}
+            if prop in ("WALL", "ROOM"):
+                if aerial is None:
+                    out.append({"source": "builder", "structure": prop, "status": "rejected", "match": 0.0, "reason": "no_aerial"})
+                    continue
 
-        for prop in proposals:
-            if prop["type"] == "WALL_PROPOSAL":
-                axis = prop["axis"]
-                coord = prop["coord"]
-                # Find nearest detected plane on that axis
-                plane_map = x_planes if axis == "x" else y_planes
-                if not plane_map:
-                    score = 0.0
-                else:
-                    nearest = min(plane_map.keys(), key=lambda c: abs(c - coord))
-                    support = plane_map[nearest].get("support", 0.0)
-                    dist = abs(nearest - coord)
-                    score = max(0.0, min(1.0, support * math.exp(-dist)))
+                arr = np.array(aerial, dtype=int)
+                solid = int(arr.sum())
 
-                self.validations.append({
-                    "type": "WALL_VALIDATION",
-                    "axis": axis,
-                    "coord": coord,
-                    "score": round(score, 3),
-                    "frame": frame,
-                })
+                # crude heuristic: if there is a non-trivial amount of solid, confirm WALL
+                if prop == "WALL":
+                    match = min(1.0, solid / 200.0)
+                    status = "confirmed" if match >= 0.25 else "rejected"
+                    out.append({"source": "builder", "structure": "WALL", "status": status, "match": round(match, 3)})
+                    continue
 
-            elif prop["type"] == "ROOM_PROPOSAL":
-                b = prop["bounds_2d"]
-                # Validate by checking existence of planes near each boundary
-                x_min = b["x_min"]; x_max = b["x_max"]
-                y_min = b["y_min"]; y_max = b["y_max"]
+                # for ROOM: we need hollow enclosed areas (some solids, some empties)
+                if prop == "ROOM":
+                    empties = int((arr == 0).sum())
+                    total = arr.size
+                    hollow_ratio = empties / float(total) if total else 0.0
+                    # confirm if there is both structure and hollow (avoid all-solid or all-empty)
+                    match = min(1.0, (solid / 200.0) * (hollow_ratio))
+                    status = "confirmed" if (solid > 150 and hollow_ratio > 0.5) else "rejected"
+                    out.append({"source": "builder", "structure": "ROOM", "status": status, "match": round(match, 3)})
+                    continue
 
-                def best_plane_score(plane_coords, target):
-                    if not plane_coords:
-                        return 0.0
-                    nearest = min(plane_coords, key=lambda c: abs(c - target))
-                    # distance penalty
-                    dist = abs(nearest - target)
-                    support = (x_planes.get(nearest) or y_planes.get(nearest) or {}).get("support", 0.0)
-                    return max(0.0, min(1.0, support * math.exp(-dist)))
+            if prop == "STATEFUL_OBJECT":
+                # confirm if TV confidence exists in ledger
+                symbols = getattr(ledger, "symbols", {}) or {}
+                tvc = symbols.get("TV", {}).get("confidence", 0.0)
+                status = "confirmed" if tvc >= 0.55 else "rejected"
+                out.append({"source": "builder", "structure": "STATEFUL_OBJECT", "status": status, "match": round(float(tvc), 3)})
+                continue
 
-                sx1 = best_plane_score(list(x_planes.keys()), x_min)
-                sx2 = best_plane_score(list(x_planes.keys()), x_max)
-                sy1 = best_plane_score(list(y_planes.keys()), y_min)
-                sy2 = best_plane_score(list(y_planes.keys()), y_max)
-
-                score = (sx1 + sx2 + sy1 + sy2) / 4.0
-                self.validations.append({
-                    "type": "ROOM_VALIDATION",
-                    "bounds_2d": b,
-                    "score": round(score, 3),
-                    "frame": frame,
-                })
-
-        return list(self.validations)
-
-    def snapshot(self) -> Dict[str, Any]:
-        return {
-            "source": "builder",
-            "name": self.name,
-            "frame": self.frame,
-            "num_validations": len(self.validations),
-            "validations_tail": self.validations[-10:],
-        }
+        return out
