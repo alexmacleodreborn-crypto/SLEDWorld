@@ -2,6 +2,7 @@
 
 from world_core.world_grid import WorldGrid
 from world_core.walker_bot import WalkerBot
+from world_core.agents.observer_bot import ObserverBot
 
 from world_core.profiles.park_profile import ParkProfile
 from world_core.profiles.house_profile import HouseProfile
@@ -37,16 +38,19 @@ class WorldState:
     def tick(self):
         """
         Advances all world agents using world time.
+        Observation is handled externally.
         Safe even if no agents exist.
         """
         for agent in self.agents:
-            agent.tick(self.clock)
+            # Only agents with tick() are time-driven
+            if hasattr(agent, "tick"):
+                agent.tick(self.clock)
 
 
 def build_world(clock):
     """
-    Constructs the base world with places and one autonomous walker.
-    Pure world layer. No cognition.
+    Constructs the base world with places and agents.
+    World-first. Agents inhabit, not control.
     """
 
     world = WorldState(clock)
@@ -73,6 +77,14 @@ def build_world(clock):
     world.add_place(house)
 
     # -------------------------
+    # Observer Bot (PASSIVE, COGNITIVE)
+    # -------------------------
+    observer = ObserverBot(
+        name="Observer-1"
+    )
+    world.add_agent(observer)
+
+    # -------------------------
     # Walker Bot (AUTONOMOUS, PHYSICAL)
     # -------------------------
     walker = WalkerBot(
@@ -80,7 +92,6 @@ def build_world(clock):
         start_xyz=house.position,
         world=world,
     )
-
     world.add_agent(walker)
 
     return world
