@@ -53,7 +53,7 @@ st.sidebar.divider()
 if st.sidebar.button("Reset World"):
     st.session_state.pop("world", None)
     st.session_state.pop("clock", None)
-    st.experimental_rerun()
+    st.rerun()
 
 # ==================================================
 # Main Display
