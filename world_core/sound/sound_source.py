@@ -1,21 +1,16 @@
 # world_core/sound/sound_source.py
 
-class SoundSource:
-    """
-    Physical sound emitter.
-    No semantics.
-    """
+from __future__ import annotations
 
-    def __init__(self, name, position, base_level=1.0):
+class SoundSource:
+    def __init__(self, name, position, base_level=0.6):
         self.name = name
         self.position = position
-        self.base_level = base_level
+        self.base_level = float(base_level)
         self.active = False
 
-    def set_active(self, state: bool):
-        self.active = state
+    def set_active(self, active: bool):
+        self.active = bool(active)
 
-    def get_level(self):
-        if not self.active:
-            return 0.0
-        return float(self.base_level)
+    def level(self) -> float:
+        return round(self.base_level if self.active else 0.0, 3)
