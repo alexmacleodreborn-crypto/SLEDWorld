@@ -8,16 +8,15 @@ class ScoutBot:
     """
     ScoutBot
 
-    Role:
-    - Focused, local observer
+    Focused, local observer.
     - No cognition
     - No naming
     - No decisions
-    - Reports structure only
+    - Shape, depth, light, sound first
 
     Think:
-    "Something was there, this far away, shaped like this,
-     and it changed like that."
+    "Something was here, this far away, shaped like this,
+     and it changed (or didn't)."
     """
 
     def __init__(
@@ -27,19 +26,19 @@ class ScoutBot:
         target_xyz,
         grid_size: int = 16,
         resolution: float = 1.0,
-        max_frames: int = 50,
+        max_frames: int = 30,
     ):
         self.name = name
 
-        # -----------------------------------------
-        # Spatial anchor
-        # -----------------------------------------
+        # -------------------------------------------------
+        # Spatial anchors
+        # -------------------------------------------------
         self.origin = np.array(origin_xyz, dtype=float)
         self.target = np.array(target_xyz, dtype=float)
 
-        # -----------------------------------------
-        # Perceptual square (local)
-        # -----------------------------------------
+        # -------------------------------------------------
+        # Local Square (depth-aware)
+        # -------------------------------------------------
         self.grid_size = grid_size
         self.resolution = resolution
 
@@ -48,16 +47,16 @@ class ScoutBot:
         self.light_grid = np.zeros((grid_size, grid_size))
         self.sound_grid = np.zeros((grid_size, grid_size))
 
-        # -----------------------------------------
+        # -------------------------------------------------
         # Observation control
-        # -----------------------------------------
+        # -------------------------------------------------
         self.frame = 0
         self.max_frames = max_frames
         self.active = True
 
-        # -----------------------------------------
-        # Memory (raw, pre-concept)
-        # -----------------------------------------
+        # -------------------------------------------------
+        # Memory (raw sketches only)
+        # -------------------------------------------------
         self.sketches = []
 
     # =================================================
@@ -72,16 +71,22 @@ class ScoutBot:
             return
 
         self.frame += 1
-
         self._clear_grids()
 
+        # Observe places (static geometry)
         for place in world.places.values():
-            self._project_entity(place.position, light=0.2)
+            self._project_point(
+                place.position,
+                light=0.2,
+                sound=0.0,
+            )
 
+        # Observe agents (dynamic, sound-emitting)
         for agent in world.agents:
             if hasattr(agent, "position"):
-                self._project_entity(
+                self._project_point(
                     agent.position,
+                    light=0.0,
                     sound=getattr(agent, "emitted_sound_level", 0.0),
                 )
 
@@ -94,18 +99,17 @@ class ScoutBot:
     # PROJECTION (DEPTH + SHAPE)
     # =================================================
 
-    def _project_entity(self, entity_xyz, light=0.0, sound=0.0):
+    def _project_point(self, xyz, light=0.0, sound=0.0):
         """
         Project a world point into the scout's local square.
         """
-        rel = np.array(entity_xyz) - self.origin
+        rel = np.array(xyz, dtype=float) - self.origin
         dx, dy, dz = rel
 
-        distance = math.sqrt(dx*dx + dy*dy + dz*dz)
+        distance = math.sqrt(dx * dx + dy * dy + dz * dz)
         if distance <= 0:
             return
 
-        # Map into grid coordinates
         half = self.grid_size // 2
         gx = int(half + dx / self.resolution)
         gy = int(half + dy / self.resolution)
@@ -122,7 +126,7 @@ class ScoutBot:
 
     def _record_sketch(self):
         """
-        Store a raw perceptual frame.
+        Store a raw perceptual sketch.
         """
         self.sketches.append({
             "frame": self.frame,
@@ -139,12 +143,39 @@ class ScoutBot:
         self.sound_grid[:] = 0
 
     # =================================================
-    # EXPORT → INVESTIGATOR
+    # SHAPE PERSISTENCE (STEP 2)
+    # =================================================
+
+    def compute_shape_persistence(self):
+        """
+        Intersection-over-Union (IoU) of occupancy grids
+        between last two frames.
+
+        Measures:
+        - Stability of outline
+        - No interpretation
+        """
+        if len(self.sketches) < 2:
+            return None
+
+        prev = np.array(self.sketches[-2]["occupancy"])
+        curr = np.array(self.sketches[-1]["occupancy"])
+
+        intersection = np.sum((prev == 1) & (curr == 1))
+        union = np.sum((prev == 1) | (curr == 1))
+
+        if union == 0:
+            return 0.0
+
+        return intersection / union
+
+    # =================================================
+    # EXPORT → SALIENCE INVESTIGATOR
     # =================================================
 
     def export_report(self):
         """
-        Report raw sketches to accounting layer.
+        Export raw perception + persistence metrics.
         """
         return {
             "scout": self.name,
@@ -152,6 +183,7 @@ class ScoutBot:
             "target": self.target.tolist(),
             "frames_observed": self.frame,
             "sketch_count": len(self.sketches),
+            "shape_persistence": self.compute_shape_persistence(),
             "sketches": self.sketches,
         }
 
@@ -167,4 +199,5 @@ class ScoutBot:
             "frames": self.frame,
             "grid_size": self.grid_size,
             "resolution": self.resolution,
+            "shape_persistence": self.compute_shape_persistence(),
         }
