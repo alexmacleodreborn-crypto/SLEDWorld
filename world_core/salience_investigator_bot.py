@@ -2,300 +2,147 @@
 
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Dict, Any, List, Tuple
-import math
-from collections import defaultdict, Counter
-
+from typing import Dict, Any, List, Optional, Tuple
 
 @dataclass
 class SalienceInvestigatorBot:
     """
-    Ledger = reality authority.
-    Ingests snapshots from observer/walker/scout/surveyor and promotes:
-
-      Surface pattern -> BRICK
-      BRICK + strong planes -> WALL
-      4 bounding WALLs -> ROOM
-      Light+Sound state machine -> TV (stateful)
-
-    Uses Architect + Builder + Language bots if attached.
+    Single source of truth.
+    Ingests snapshots; emits transactions + symbol promotions.
+    Deploys scouts on salient changes (sound/light toggles).
     """
-
-    name: str = "Ledger-1"
     frame_counter: int = 0
     ledger: List[Dict[str, Any]] = field(default_factory=list)
-    transitions: List[Dict[str, Any]] = field(default_factory=list)
 
-    # Symbol store
-    symbols: Dict[str, Any] = field(default_factory=lambda: {"types": {}, "instances": []})
+    # stable symbol store
+    symbols: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
-    # For transition detection
-    _last_by_key: Dict[Tuple[str, str], Dict[str, Any]] = field(default_factory=dict)
+    # internal memory
+    _last_tv_state: Optional[bool] = None
+    _last_tv_light: Optional[str] = None
+    _last_tv_sound: Optional[float] = None
 
-    # Cached geometry summaries from surveyor
-    geom: Dict[str, Any] = field(default_factory=dict)
-
-    # External modules (optional)
-    architect: Any = None
-    builder: Any = None
-    language: Any = None
-
-    def attach(self, architect=None, builder=None, language=None):
-        self.architect = architect
-        self.builder = builder
-        self.language = language
-
-    # --------------------------
-    # Ingest
-    # --------------------------
-    def ingest(self, snap: Dict[str, Any]):
-        if not isinstance(snap, dict):
-            return
-        if "source" not in snap:
+    def ingest(self, snap: Dict[str, Any], world=None) -> None:
+        if not isinstance(snap, dict) or "source" not in snap:
             return
 
-        frame = int(snap.get("frame", 0) or 0)
-        self.frame_counter = max(self.frame_counter, frame)
+        self.frame_counter = max(self.frame_counter, int(snap.get("frame", 0) or 0))
 
-        entry = {
-            "frame": frame,
-            "source": snap.get("source"),
-            "type": snap.get("type"),
-            "name": snap.get("name"),
-            "area": snap.get("current_area") or snap.get("area"),
-            "bounds": snap.get("bounds") or snap.get("current_bounds"),
-            "signals": snap.get("signals", {}) or {},
-            # keep small: do not store huge volumes here
-        }
+        src = snap.get("source")
+        if src == "observer":
+            self._handle_observer(snap, world)
+        elif src == "surveyor":
+            self._handle_surveyor(snap)
+        elif src == "scout":
+            self._handle_scout(snap)
+        elif src == "walker":
+            self._handle_walker(snap)
+
+    def _tx(self, t: str, data: Dict[str, Any]):
+        entry = {"frame": self.frame_counter, "type": t, **data}
         self.ledger.append(entry)
 
-        # Transition detection (sound/light changes)
-        key = (str(entry["source"]), str(entry.get("area") or entry.get("name") or "unknown"))
-        prev = self._last_by_key.get(key)
-        self._last_by_key[key] = entry
+    def _handle_walker(self, snap, world):
+        if snap.get("last_action"):
+            self._tx("action", {"who": snap.get("name"), "action": snap.get("last_action"), "area": snap.get("current_area")})
 
-        if prev:
-            self._detect_transitions(prev, entry)
+    def _handle_observer(self, snap, world):
+        # Detect TV via any seen object snapshot containing tv fields
+        seen = snap.get("seen_objects", {})
+        # pick first item that has 'is_on' or light_color fields
+        tv_key = None
+        tv = None
+        for k, v in seen.items():
+            if isinstance(v, dict) and ("is_on" in v or "light_color" in v or "sound_level" in v):
+                tv_key = k
+                tv = v
+                break
 
-    def _detect_transitions(self, prev: Dict[str, Any], cur: Dict[str, Any]):
-        psig = prev.get("signals", {}) or {}
-        csig = cur.get("signals", {}) or {}
+        if tv is not None:
+            is_on = tv.get("is_on")
+            light_color = tv.get("light_color")
+            sound_level = tv.get("sound_level")
 
-        # sound
-        if "sound" in psig or "sound" in csig:
-            ps = float(psig.get("sound", 0.0) or 0.0)
-            cs = float(csig.get("sound", 0.0) or 0.0)
-            if abs(cs - ps) >= 0.2:
-                self.transitions.append({
-                    "frame": cur["frame"],
-                    "event": "sound_change",
-                    "key": [prev["source"], prev.get("area") or prev.get("name") or "unknown"],
-                    "from": round(ps, 3),
-                    "to": round(cs, 3),
-                })
+            changed = False
+            if self._last_tv_state is None:
+                self._last_tv_state = is_on
+                self._last_tv_light = light_color
+                self._last_tv_sound = sound_level
+            else:
+                if is_on != self._last_tv_state:
+                    self._tx("tv_state_change", {"key": tv_key, "from": self._last_tv_state, "to": is_on})
+                    changed = True
+                if light_color != self._last_tv_light:
+                    self._tx("tv_light_change", {"key": tv_key, "from": self._last_tv_light, "to": light_color})
+                    changed = True
+                if sound_level != self._last_tv_sound:
+                    self._tx("tv_sound_change", {"key": tv_key, "from": self._last_tv_sound, "to": sound_level})
+                    changed = True
 
-        # light
-        pl = psig.get("light", None)
-        cl = csig.get("light", None)
-        if isinstance(pl, dict) and isinstance(cl, dict):
-            pi = float(pl.get("intensity", 0.0) or 0.0)
-            ci = float(cl.get("intensity", 0.0) or 0.0)
-            pc = str(pl.get("color", "none"))
-            cc = str(cl.get("color", "none"))
+                self._last_tv_state = is_on
+                self._last_tv_light = light_color
+                self._last_tv_sound = sound_level
 
-            if abs(ci - pi) >= 0.2 or cc != pc:
-                self.transitions.append({
-                    "frame": cur["frame"],
-                    "event": "light_change",
-                    "key": [prev["source"], prev.get("area") or prev.get("name") or "unknown"],
-                    "from": {"intensity": round(pi, 3), "color": pc},
-                    "to": {"intensity": round(ci, 3), "color": cc},
-                })
+            # If changed, deploy scouts to confirm signatures
+            if changed and world is not None:
+                # use walker position if available, else tv position unknown -> use neighbourhood center
+                walker = world.get_agent("WalkerBot")
+                center = tuple(walker.position) if walker else world.surveyor.center_xyz
+                world.deploy_scout("sound", center_xyz=center, name=f"Scout-sound-{self.frame_counter}", max_frames=25)
+                world.deploy_scout("light", center_xyz=center, name=f"Scout-light-{self.frame_counter}", max_frames=25)
 
-        if len(self.transitions) > 500:
-            self.transitions = self.transitions[-500:]
+            # Promote symbol TV once we see correlated light+sound at least once
+            self.symbols.setdefault("TV", {"symbol": "TV", "confidence": 0.5})
+            self.symbols["TV"]["confidence"] = min(1.0, self.symbols["TV"]["confidence"] + 0.05)
 
-    # --------------------------
-    # Geometry summarisation from Surveyor
-    # --------------------------
-    def ingest_surveyor_snapshot(self, surveyor_snap: Dict[str, Any]):
-        """
-        surveyor_snap may contain surface_volume (smallish).
-        We summarise into dominant planes so higher layers stay cheap.
-        """
-        if not isinstance(surveyor_snap, dict):
-            return
-        if surveyor_snap.get("source") != "surveyor":
-            return
+            if light_color in ("red", "green"):
+                self.symbols.setdefault("COLOR", {"symbol": "COLOR", "confidence": 0.4})
+                self.symbols["COLOR"]["confidence"] = min(1.0, self.symbols["COLOR"]["confidence"] + 0.02)
+                # store grounded color tokens
+                self.symbols.setdefault(f"COLOR_{light_color.upper()}", {"symbol": f"COLOR_{light_color.upper()}", "confidence": 0.6})
 
-        frame = int(surveyor_snap.get("frame", self.frame_counter) or self.frame_counter)
-        self.frame_counter = max(self.frame_counter, frame)
+            if is_on is not None:
+                self.symbols.setdefault("ONOFF", {"symbol": "ONOFF", "confidence": 0.5})
+                self.symbols["ONOFF"]["confidence"] = min(1.0, self.symbols["ONOFF"]["confidence"] + 0.02)
+                self.symbols.setdefault("ON", {"symbol": "ON", "confidence": 0.6})
+                self.symbols.setdefault("OFF", {"symbol": "OFF", "confidence": 0.6})
 
-        surf = surveyor_snap.get("surface_volume", None)
-        if surf is None:
-            return
+    def _handle_surveyor(self, snap):
+        # aerial grid exists: allows structural promotions later
+        if "aerial_grid" in snap:
+            self._tx("aerial_update", {"note": "aerial_grid_updated"})
+            self.symbols.setdefault("AERIAL_MAP", {"symbol": "AERIAL_MAP", "confidence": 0.7})
+            self.symbols["AERIAL_MAP"]["confidence"] = min(1.0, self.symbols["AERIAL_MAP"]["confidence"] + 0.01)
 
-        # surf: [z][y][x] binary
-        nz = len(surf)
-        ny = len(surf[0]) if nz else 0
-        nx = len(surf[0][0]) if (nz and ny) else 0
+    def _handle_scout(self, snap):
+        # simply log receipt; later used for signatures
+        self._tx("scout_report", {"name": snap.get("name"), "signal": snap.get("signal")})
 
-        # Count surface voxels per x-plane and y-plane (across all z)
-        x_counts = [0] * nx
-        y_counts = [0] * ny
-        total = 0
+        sig = snap.get("signal")
+        if sig == "sound":
+            self.symbols.setdefault("SOUND_FIELD", {"symbol": "SOUND_FIELD", "confidence": 0.5})
+            self.symbols["SOUND_FIELD"]["confidence"] = min(1.0, self.symbols["SOUND_FIELD"]["confidence"] + 0.02)
+        if sig == "light":
+            self.symbols.setdefault("LIGHT_FIELD", {"symbol": "LIGHT_FIELD", "confidence": 0.5})
+            self.symbols["LIGHT_FIELD"]["confidence"] = min(1.0, self.symbols["LIGHT_FIELD"]["confidence"] + 0.02)
+        if sig == "shape":
+            self.symbols.setdefault("SHAPE_FIELD", {"symbol": "SHAPE_FIELD", "confidence": 0.5})
+            self.symbols["SHAPE_FIELD"]["confidence"] = min(1.0, self.symbols["SHAPE_FIELD"]["confidence"] + 0.02)
 
-        for iz in range(nz):
-            for iy in range(ny):
-                row = surf[iz][iy]
-                for ix in range(nx):
-                    if row[ix] == 1:
-                        total += 1
-                        x_counts[ix] += 1
-                        y_counts[iy] += 1
+    def apply_structures(self, validations: List[Dict[str, Any]]):
+        # Builder confirmations promote stable structural symbols
+        for v in validations:
+            if v.get("status") == "confirmed":
+                sym = v.get("structure")
+                if not sym:
+                    continue
+                self.symbols.setdefault(sym, {"symbol": sym, "confidence": 0.7})
+                self.symbols[sym]["confidence"] = min(1.0, self.symbols[sym]["confidence"] + 0.05)
+                self._tx("structure_confirmed", {"structure": sym, "match": v.get("match")})
 
-        def top_planes(counts, axis: str, k=4):
-            if not counts:
-                return []
-            m = max(counts) if counts else 0
-            if m <= 0:
-                return []
-            # threshold to avoid noise
-            thresh = 0.35 * m
-            planes = []
-            for i, c in enumerate(counts):
-                if c >= thresh:
-                    planes.append({"idx": i, "support": c / (m + 1e-9)})
-            # Take top k by support
-            planes = sorted(planes, key=lambda d: d["support"], reverse=True)[:k]
-            return planes
-
-        planes_x = top_planes(x_counts, "x")
-        planes_y = top_planes(y_counts, "y")
-
-        # Convert idx -> world coord approximation
-        cx, cy, cz = surveyor_snap.get("center_xyz", (0.0, 0.0, 0.0))
-        r = float(surveyor_snap.get("extent_m", 10.0) or 10.0)
-        step = float(surveyor_snap.get("resolution_m", 1.0) or 1.0)
-
-        def idx_to_coord(axis: str, idx: int):
-            if axis == "x":
-                return (cx - r) + idx * step
-            if axis == "y":
-                return (cy - r) + idx * step
-            return 0.0
-
-        self.geom = {
-            "frame": frame,
-            "volume_shape": surveyor_snap.get("volume_shape", (nz, ny, nx)),
-            "total_surface_voxels": total,
-            "planes": {
-                "x": [{"coord": idx_to_coord("x", p["idx"]), "support": p["support"], "idx": p["idx"]} for p in planes_x],
-                "y": [{"coord": idx_to_coord("y", p["idx"]), "support": p["support"], "idx": p["idx"]} for p in planes_y],
-            },
-        }
-
-    # --------------------------
-    # Promotion rules
-    # --------------------------
-    def promote(self):
-        """
-        Run promotions once per frame (after all ingests).
-        """
-        frame = self.frame_counter
-
-        # --- TV symbol: detect stable state machine from light/sound transitions
-        tv_conf = self._tv_confidence()
-        if tv_conf >= 0.8:
-            self._ensure_symbol_type("TV", confidence=tv_conf, meta={"stateful": True, "signals": ["sound", "light"]})
-
-        # --- BRICK symbol: if we have strong surface planes and persistence
-        brick_conf = self._brick_confidence()
-        if brick_conf >= 0.75:
-            # Derived "brick size" from survey resolution as a placeholder emergent scale.
-            # This is not hard-coded as an object; it's a compression unit.
-            step = 1.0
-            if self.geom:
-                # infer step from plane coord spacing if possible; else keep 1.0
-                step = 1.0
-            self._ensure_symbol_type("BRICK", confidence=brick_conf, meta={"unit": "surface_repeat", "scale_hint_m": step})
-
-        # --- Architect + Builder pathway for WALL / ROOM
-        if self.architect and self.builder and self.geom and "BRICK" in self.symbols["types"]:
-            proposals = self.architect.propose(frame=frame, symbols=self.symbols, geom=self.geom)
-            validations = self.builder.validate(frame=frame, proposals=proposals, geom=self.geom)
-
-            # Promote WALL if any validation score high
-            wall_scores = [v["score"] for v in validations if v["type"] == "WALL_VALIDATION"]
-            if wall_scores and max(wall_scores) >= 0.75:
-                self._ensure_symbol_type("WALL", confidence=max(wall_scores), meta={"from": "BRICK+planes"})
-
-            # Promote ROOM if room validation high and we have WALL
-            room_scores = [v["score"] for v in validations if v["type"] == "ROOM_VALIDATION"]
-            if room_scores and max(room_scores) >= 0.75 and "WALL" in self.symbols["types"]:
-                self._ensure_symbol_type("ROOM", confidence=max(room_scores), meta={"from": "4 walls enclosure"})
-
-        # --- Language update (late-stage)
-        if self.language:
-            self.language.update(frame=frame, symbols=self.symbols, transitions=self.transitions)
-
-    def _ensure_symbol_type(self, sym: str, confidence: float, meta: Dict[str, Any] | None = None):
-        cur = self.symbols["types"].get(sym)
-        if cur is None:
-            self.symbols["types"][sym] = {
-                "confidence": round(float(confidence), 3),
-                "first_frame": self.frame_counter,
-                "meta": meta or {},
-            }
-        else:
-            # confidence can only increase slowly (persistence)
-            cur_conf = float(cur.get("confidence", 0.0) or 0.0)
-            new_conf = max(cur_conf, float(confidence))
-            cur["confidence"] = round(min(new_conf, 0.999), 3)
-            if meta:
-                cur_meta = cur.get("meta", {}) or {}
-                cur_meta.update(meta)
-                cur["meta"] = cur_meta
-
-    def _tv_confidence(self) -> float:
-        """
-        TV emerges when both sound and light transitions happen repeatedly.
-        """
-        lc = sum(1 for t in self.transitions[-120:] if t.get("event") == "light_change")
-        sc = sum(1 for t in self.transitions[-120:] if t.get("event") == "sound_change")
-        # Need at least a couple of toggles
-        if lc >= 2 and sc >= 2:
-            return 0.8 + min(0.15, 0.02 * (lc + sc))
-        if lc >= 1 and sc >= 1:
-            return 0.7
-        return 0.0
-
-    def _brick_confidence(self) -> float:
-        """
-        BRICK emerges when we have stable strong planes and enough surface data.
-        """
-        if not self.geom:
-            return 0.0
-        total = self.geom.get("total_surface_voxels", 0) or 0
-        px = self.geom.get("planes", {}).get("x", [])
-        py = self.geom.get("planes", {}).get("y", [])
-
-        strong = sum(1 for p in (px + py) if p.get("support", 0.0) >= 0.7)
-        if total > 50 and strong >= 2:
-            return 0.75 + min(0.2, 0.05 * (strong - 1))
-        if total > 30 and strong >= 1:
-            return 0.65
-        return 0.0
-
-    def snapshot(self) -> Dict[str, Any]:
+    def snapshot(self):
         return {
-            "source": "ledger",
-            "name": self.name,
-            "frame": self.frame_counter,
-            "total_entries": len(self.ledger),
-            "total_transitions": len(self.transitions),
+            "frame_counter": self.frame_counter,
+            "ledger_len": len(self.ledger),
             "symbols": self.symbols,
-            "geom": self.geom,
-            "transitions_tail": self.transitions[-15:],
-            "ledger_tail": self.ledger[-15:],
         }
