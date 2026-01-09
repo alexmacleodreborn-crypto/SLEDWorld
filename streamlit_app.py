@@ -83,7 +83,7 @@ for agent in world.agents:
         st.json(agent.snapshot())
 
 if not observer_found:
-    st.error("No observation agent present.")
+    st.warning("No observation agent present.")
 
 # --------------------------
 # World Agents (Secondary)
@@ -98,7 +98,11 @@ for agent in world.agents:
 # --------------------------
 st.subheader("Salience Ledger (Accounting)")
 
-investigator = world.salience_investigator
+investigator = getattr(world, "salience_investigator", None)
+
+if investigator is None:
+    st.warning("Salience Investigator not present in this world instance.")
+    st.stop()
 
 col1, col2 = st.columns(2)
 
@@ -124,6 +128,7 @@ else:
 # ==================================================
 st.caption(
     "Reality persists independently. "
-    "Observers learn persistence. "
+    "Observers perceive. "
+    "Salience is accounted. "
     "Time is subordinate."
 )
