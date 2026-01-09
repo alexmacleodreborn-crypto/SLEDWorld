@@ -1,144 +1,202 @@
 # world_core/walker_bot.py
 
-from __future__ import annotations
 import math
 import random
-from typing import Tuple, Optional, Dict, Any
+from datetime import datetime
+
 
 class WalkerBot:
     """
-    Physical probe. No cognition.
-    - Moves around.
-    - Returns to living room TV periodically and toggles via remote.
-    - Wraps around neighbourhood bounds (globe/torus effect).
+    Pure physical agent.
+
+    - Walks the world
+    - Returns to TV at fixed intervals
+    - Toggles TV power (on/off)
+    - No learning
+    - No cognition
     """
+
     def __init__(
         self,
         name: str,
-        start_xyz: Tuple[float, float, float],
-        world_bounds,
-        return_to_tv_every: int = 15,
-        speed_m_per_min: float = 6.0
+        start_xyz,
+        world,
+        speed_m_per_min: float = 1.2,
+        return_interval: int = 15,
     ):
         self.name = name
-        self.position = [float(start_xyz[0]), float(start_xyz[1]), float(start_xyz[2])]
+        self.world = world
+
+        # -----------------------------
+        # Physical state
+        # -----------------------------
+        self.position = [
+            float(start_xyz[0]),
+            float(start_xyz[1]),
+            float(start_xyz[2]),
+        ]
+
         self.speed = float(speed_m_per_min)
-        self.return_to_tv_every = int(return_to_tv_every)
-        self._step_counter = 0
-        self._target: Optional[Tuple[float, float, float]] = None
-        self._target_label: Optional[str] = None
-        self.last_action: Optional[str] = None
-        self.current_area: str = "world"
-        self.world_bounds = world_bounds  # ((minx,miny,minz),(maxx,maxy,maxz))
+        self.arrival_threshold = 0.5
 
-    def _wrap(self):
-        if not self.world_bounds:
+        # -----------------------------
+        # Behaviour control
+        # -----------------------------
+        self.return_interval = int(return_interval)
+        self.frame_counter = 0
+
+        self.target = None
+        self.target_label = None
+
+        # -----------------------------
+        # Observer-visible state
+        # -----------------------------
+        self.current_area = "world"
+        self.ledger = []
+
+        self._last_time = None
+
+        self._pick_new_target()
+        self._log("initialised")
+
+    # =================================================
+    # Logging (world time)
+    # =================================================
+
+    def _log(self, event: str):
+        try:
+            t = self.world.clock.world_datetime.isoformat(timespec="seconds")
+        except Exception:
+            t = datetime.utcnow().isoformat(timespec="seconds")
+
+        self.ledger.append({
+            "time": t,
+            "event": event,
+            "area": self.current_area,
+        })
+
+    # =================================================
+    # Targeting
+    # =================================================
+
+    def _pick_new_target(self):
+        """
+        Random wander target.
+        """
+        places = list(self.world.places.values())
+        if not places:
             return
-        (minx, miny, minz), (maxx, maxy, maxz) = self.world_bounds
-        # torus wrap x/y
-        if self.position[0] < minx:
-            self.position[0] = maxx
-        elif self.position[0] > maxx:
-            self.position[0] = minx
-        if self.position[1] < miny:
-            self.position[1] = maxy
-        elif self.position[1] > maxy:
-            self.position[1] = miny
-        # clamp z
-        self.position[2] = min(max(self.position[2], minz), maxz)
 
-    def _pick_random_target(self, world):
-        # pick a random point within neighbourhood bounds
-        (minx, miny, minz), (maxx, maxy, maxz) = self.world_bounds
-        self._target = (
-            random.uniform(minx, maxx),
-            random.uniform(miny, maxy),
-            0.0
-        )
-        self._target_label = "wander"
+        place = random.choice(places)
 
-    def _resolve_area(self, world):
-        xyz = tuple(self.position)
-        # rooms first
-        for place in world.places.values():
+        if hasattr(place, "random_point_inside"):
+            self.target = list(place.random_point_inside())
+            self.target_label = place.name
+        else:
+            self.target = list(place.position)
+            self.target_label = place.name
+
+    def _target_tv(self):
+        """
+        Force target to TV location.
+        """
+        for place in self.world.places.values():
             if hasattr(place, "rooms"):
                 for room in place.rooms.values():
-                    if room.contains_world_point(xyz):
-                        self.current_area = room.name
+                    if "tv" in room.objects:
+                        tv = room.objects["tv"]
+                        self.target = list(tv.position)
+                        self.target_label = "tv"
                         return
-        # places
-        for place in world.places.values():
-            if hasattr(place, "contains_world_point") and place.contains_world_point(xyz):
-                self.current_area = place.name
-                return
-        self.current_area = "world"
 
-    def _move_towards(self, minutes: float):
-        if self._target is None:
+    # =================================================
+    # World tick
+    # =================================================
+
+    def tick(self, clock):
+        now = clock.world_datetime
+
+        if self._last_time is None:
+            self._last_time = now
             return
-        dx = self._target[0] - self.position[0]
-        dy = self._target[1] - self.position[1]
-        dz = self._target[2] - self.position[2]
-        dist = math.sqrt(dx*dx + dy*dy + dz*dz)
-        if dist < 0.5:
-            self._target = None
-            self._target_label = None
+
+        delta_seconds = (now - self._last_time).total_seconds()
+        self._last_time = now
+
+        if delta_seconds <= 0:
             return
+
+        minutes = delta_seconds / 60.0
+
+        self.frame_counter += 1
+
+        # Every N frames → return to TV
+        if self.frame_counter % self.return_interval == 0:
+            self._target_tv()
+
+        self._move(minutes)
+        self._resolve_current_area()
+        self._interact_if_possible()
+
+    # =================================================
+    # Movement
+    # =================================================
+
+    def _move(self, minutes):
+        if not self.target:
+            self._pick_new_target()
+            return
+
+        dx = self.target[0] - self.position[0]
+        dy = self.target[1] - self.position[1]
+        dz = self.target[2] - self.position[2]
+
+        distance = math.sqrt(dx*dx + dy*dy + dz*dz)
+
+        if distance <= self.arrival_threshold:
+            self._log(f"arrived:{self.target_label}")
+            self._pick_new_target()
+            return
+
         step = self.speed * minutes
-        scale = min(step / dist, 1.0)
+        scale = min(step / distance, 1.0)
+
         self.position[0] += dx * scale
         self.position[1] += dy * scale
         self.position[2] += dz * scale
-        self._wrap()
 
-    def tick(self, clock, world):
-        self._step_counter += 1
-        self.last_action = None
+    # =================================================
+    # Interaction
+    # =================================================
 
-        minutes = 1.0  # world.tick already steps minutes; keep simple
+    def _interact_if_possible(self):
+        """
+        Toggle TV if inside living room.
+        """
+        for place in self.world.places.values():
+            if not hasattr(place, "rooms"):
+                continue
 
-        # every N frames, go to house living room TV
-        if self._step_counter % self.return_to_tv_every == 0:
-            # find living_room tv in Family House
-            tv_loc = None
-            for place in world.places.values():
-                if place.name == "Family House" and hasattr(place, "rooms"):
-                    for room in place.rooms.values():
-                        if room.room_type == "living_room":
-                            tv = room.objects.get("tv")
-                            if tv and hasattr(tv, "position"):
-                                tv_loc = tv.position
-                                # move near remote (same area)
-                                self._target = (tv_loc[0], tv_loc[1] + 1.0, tv_loc[2])
-                                self._target_label = "tv_return"
-            if tv_loc is None and self._target is None:
-                self._pick_random_target(world)
+            for room in place.rooms.values():
+                if room.contains_world_point(tuple(self.position)):
+                    self.current_area = room.name
 
-        if self._target is None:
-            self._pick_random_target(world)
+                    if "remote" in room.objects:
+                        room.interact("remote", "power_toggle")
+                        self._log("tv:power_toggle")
+                        return
 
-        self._move_towards(minutes)
-        self._resolve_area(world)
+    # =================================================
+    # Observer snapshot
+    # =================================================
 
-        # if inside living room, attempt remote interaction
-        if "living_room" in self.current_area:
-            for place in world.places.values():
-                if hasattr(place, "rooms"):
-                    for room in place.rooms.values():
-                        if room.name == self.current_area and "remote" in room.objects:
-                            # use remote every visit
-                            ok = room.interact("remote", "power_toggle")
-                            if ok is not False:
-                                self.last_action = "remote:power_toggle"
-                            return
-
-    def snapshot(self) -> Dict[str, Any]:
+    def snapshot(self):
         return {
             "source": "walker",
             "name": self.name,
             "position_xyz": [round(v, 2) for v in self.position],
             "current_area": self.current_area,
-            "target": self._target_label,
-            "speed_m_per_min": self.speed,
-            "last_action": self.last_action,
+            "target": self.target_label,
+            "frame": self.frame_counter,
+            "ledger_tail": self.ledger[-5:],
         }
