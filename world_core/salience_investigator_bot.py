@@ -1,63 +1,81 @@
 # world_core/salience_investigator_bot.py
 
+from world_core.scout_bot import ScoutBot
+
+
 class SalienceInvestigatorBot:
     """
-    Accounting layer.
-    No cognition. No action.
-    Builds structured memory.
+    Accounting + attention allocator.
     """
 
     def __init__(self):
-        self.frame_counter = 0
+        self.frame = 0
         self.ledger = []
-        self.patterns = {}
 
-    # -------------------------------------------------
-    # INGEST FROM OBSERVER
-    # -------------------------------------------------
-    def ingest_observer_snapshot(self, snapshot):
-        self.frame_counter += 1
+        # Simple salience counters
+        self.sound_events = 0
 
-        entry = {
-            "frame": self.frame_counter,
-            "source": "observer",
-            "data": snapshot,
-        }
-        self.ledger.append(entry)
+    # -------------------------
+    # INGESTION
+    # -------------------------
 
-        self._accumulate_patterns(snapshot)
-
-    # -------------------------------------------------
-    # INGEST FROM WALKER
-    # -------------------------------------------------
     def ingest_physical_event(self, event):
-        entry = {
-            "frame": self.frame_counter,
+        self.ledger.append({
             "source": "walker",
-            "data": event,
-        }
-        self.ledger.append(entry)
+            "frame": self.frame,
+            "event": event,
+        })
 
         if event.get("sound_emitted", 0) > 0:
-            self.patterns["sound_emission"] = (
-                self.patterns.get("sound_emission", 0) + 1
-            )
+            self.sound_events += 1
 
-    # -------------------------------------------------
-    # PATTERN ACCUMULATION (NO INTERPRETATION)
-    # -------------------------------------------------
-    def _accumulate_patterns(self, snapshot):
-        if snapshot.get("heard_sound_events", 0) > 0:
-            self.patterns["heard_sound"] = (
-                self.patterns.get("heard_sound", 0) + 1
-            )
+    def ingest_observer_snapshot(self, snapshot):
+        self.frame += 1
+        self.ledger.append({
+            "source": "observer",
+            "frame": self.frame,
+            "snapshot": snapshot,
+        })
 
-    # -------------------------------------------------
+    def ingest_scout_report(self, report):
+        self.ledger.append({
+            "source": "scout",
+            "frame": self.frame,
+            "report": report,
+        })
+
+    # -------------------------
+    # ATTENTION ALLOCATION
+    # -------------------------
+
+    def spawn_scouts_if_needed(self):
+        """
+        If repeated sound events occur, allocate a scout.
+        """
+        scouts = []
+
+        if self.sound_events >= 2:
+            # Reset counter to avoid infinite spawning
+            self.sound_events = 0
+
+            scout = ScoutBot(
+                name=f"Scout-sound-{self.frame}",
+                origin_xyz=(4800, 5100, 0),
+                target_xyz=(4800, 5100, 0),
+                grid_size=16,
+                resolution=1.0,
+                max_frames=20,
+            )
+            scouts.append(scout)
+
+        return scouts
+
+    # -------------------------
     # SNAPSHOT (UI)
-    # -------------------------------------------------
+    # -------------------------
+
     def snapshot(self):
         return {
-            "frames_processed": self.frame_counter,
-            "total_records": len(self.ledger),
-            "patterns": dict(self.patterns),
+            "frames_processed": self.frame,
+            "ledger_entries": len(self.ledger),
         }
