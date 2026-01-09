@@ -26,7 +26,7 @@ clock = st.session_state.clock
 world = st.session_state.world
 
 # ==================================================
-# Sidebar
+# Sidebar – World Advancement
 # ==================================================
 st.sidebar.header("World Advancement")
 
@@ -46,50 +46,76 @@ if st.sidebar.button("Reset World"):
 # ==================================================
 st.title("SLEDWorld – Reality Frame")
 
-# --------------------------
-# Surveyors
-# --------------------------
+# ==================================================
+# Surveyors — Geometry
+# ==================================================
 st.subheader("Surveyors — Physical Geometry")
 
-if not world.surveyors:
+surveyors = getattr(world, "surveyors", [])
+
+if not surveyors:
     st.info("No active surveyors.")
 else:
-    for sv in world.surveyors:
-        snap = sv.snapshot()
-        with st.expander(f"{snap['name']} · frame {snap['frame']}"):
+    for idx, sv in enumerate(surveyors):
+        snap = sv.snapshot() or {}
+
+        name = snap.get("name", f"Surveyor-{idx}")
+        frame = snap.get("frame", "—")
+        active = snap.get("active", False)
+
+        with st.expander(f"{name} · frame {frame} · active={active}", expanded=False):
+
+            occ = snap.get("occupancy_grid")
+            surf = snap.get("surface_grid")
+
             col1, col2 = st.columns(2)
 
             with col1:
-                st.write("Occupancy (solid)")
-                grid = np.array(snap["occupancy_grid"])
-                fig, ax = plt.subplots()
-                ax.imshow(grid, cmap="gray")
-                ax.axis("off")
-                st.pyplot(fig)
+                st.markdown("**Occupancy (solid vs empty)**")
+                if occ:
+                    arr = np.array(occ)
+                    fig, ax = plt.subplots()
+                    ax.imshow(arr, cmap="gray")
+                    ax.axis("off")
+                    st.pyplot(fig)
+                else:
+                    st.write("No occupancy data yet.")
 
             with col2:
-                st.write("Surface map")
-                grid = np.array(snap["surface_grid"])
-                fig, ax = plt.subplots()
-                ax.imshow(grid, cmap="hot")
-                ax.axis("off")
-                st.pyplot(fig)
+                st.markdown("**Surface map (edges)**")
+                if surf:
+                    arr = np.array(surf)
+                    fig, ax = plt.subplots()
+                    ax.imshow(arr, cmap="hot")
+                    ax.axis("off")
+                    st.pyplot(fig)
+                else:
+                    st.write("No surface data yet.")
 
-# --------------------------
-# Investigator
-# --------------------------
+# ==================================================
+# Salience Investigator
+# ==================================================
 st.subheader("Salience Ledger")
 
-investigator = world.salience_investigator
-st.metric("Transactions", len(investigator.ledger))
-st.json(investigator.ledger[-10:])
+investigator = getattr(world, "salience_investigator", None)
+
+if investigator is None:
+    st.warning("No salience investigator present.")
+else:
+    st.metric("Total Transactions", len(investigator.ledger))
+
+    if investigator.ledger:
+        st.subheader("Recent Transactions")
+        st.json(investigator.ledger[-10:])
+    else:
+        st.write("No salience transactions yet.")
 
 # ==================================================
 # Footer
 # ==================================================
 st.caption(
     "Reality exists first. "
-    "Shape precedes meaning. "
+    "Geometry precedes meaning. "
     "Fields bind to surfaces. "
     "Time is optional."
 )
