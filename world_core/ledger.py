@@ -1,101 +1,129 @@
 # world_core/ledger.py
 
+from dataclasses import dataclass, field
 from typing import List, Dict, Any
-from world_core.ledger_event import LedgerEvent
+
 from world_core.sandys_square import coherence_gate
 
+
+# ============================================================
+# Ledger Event
+# ============================================================
+
+@dataclass
+class LedgerEvent:
+    """
+    Atomic record of a world observation or inference.
+
+    This is the ONLY unit the Manager reasons over.
+    """
+    frame: int
+    source: str
+    payload: Dict[str, Any]
+
+
+# ============================================================
+# Ledger Core
+# ============================================================
+
+@dataclass
 class Ledger:
     """
-    Immutable record + Sandy’s Law gating.
-    Not a bot. No perception. No action.
+    Central truth table of the world.
+
+    Responsibilities:
+    - Store all events
+    - Track pattern stability
+    - Run SandySquare coherence gating
+    - Expose semantic readiness for Manager approval
     """
-    def __init__(self):
-        self.events: List[LedgerEvent] = []
 
-        # rolling metrics
-        self.pattern_stability: float = 0.0
-        self.structure_confidence: float = 0.0
-        self.semantic_readiness: float = 0.0
-        self.square_coherence: float = 0.0
+    events: List[LedgerEvent] = field(default_factory=list)
 
-        # derived gate state
-        self.manager_approval: Dict[str, Any] = {}
+    # Rolling metrics
+    pattern_stability: float = 0.0
+    square_coherence: Dict[str, Any] = field(default_factory=dict)
+    semantic_readiness: float = 0.0
 
-        # caches
-        self._entity_counts: Dict[str, int] = {}
-        self._recent_points: List[tuple[int,int]] = []  # for square gate demo
+    # Internal buffers
+    _recent_points: List[Dict[str, Any]] = field(default_factory=list)
 
-    def ingest(self, ev: LedgerEvent):
-        self.events.append(ev)
+    # ========================================================
+    # Ingest
+    # ========================================================
 
-        self._entity_counts[ev.entity] = self._entity_counts.get(ev.entity, 0) + 1
+    def ingest(self, event: LedgerEvent):
+        """
+        Add an event to the ledger and recompute gates.
+        """
+        self.events.append(event)
 
-        # Collect points if present (y,x) integer
-        pt = ev.payload.get("point_yx")
-        if isinstance(pt, (list, tuple)) and len(pt) == 2:
-            self._recent_points.append((int(pt[0]), int(pt[1])))
-            self._recent_points = self._recent_points[-300:]
-
-        self._recompute(ev.frame)
-
-    def tail(self, n=50) -> List[Dict[str, Any]]:
-        t = self.events[-n:]
-        return [{
-            "frame": e.frame, "source": e.source, "entity": e.entity, "kind": e.kind,
-            "confidence": e.confidence, "payload": e.payload
-        } for e in t]
-
-    # -------------------------
-    # Sandy’s Law-style metrics
-    # -------------------------
-    def _recompute(self, frame: int):
-        # Pattern stability: repetition of same entities
-        total = len(self.events)
-        if total == 0:
-            return
-
-        top = max(self._entity_counts.values()) if self._entity_counts else 0
-        self.pattern_stability = min(1.0, top / max(10, total))
-
-        # Structure confidence: do we have structure-like sources?
-        structure_hits = sum(1 for e in self.events[-200:] if e.kind in ("structure", "survey"))
-        self.structure_confidence = min(1.0, structure_hits / 60.0)
-
-        # Square coherence from recent points
-        # (this is your SandySquare gate signal)
-        self.square_coherence = coherence_gate(self._recent_points, size=32)
-
-        # Semantic readiness: needs stable patterns + coherence
-        self.semantic_readiness = min(1.0, 0.55*self.pattern_stability + 0.45*self.square_coherence)
-
-        # Z / Σ style gating (simple v1)
-        # Σ ~ change density; Z ~ inhibition / structure
-        Sigma = 1.0 - self.pattern_stability
-        Z = self.square_coherence
-
-        divergence = Sigma * Z
-        coherence = 1.0 - divergence
-
-        # Gates
-        self.manager_approval = {
-            "frame": frame,
-            "Sigma": round(Sigma, 3),
-            "Z": round(Z, 3),
-            "divergence": round(divergence, 3),
-            "coherence": round(coherence, 3),
-
-            "patterns_stable": self.pattern_stability >= 0.20,
-            "structure_confirmed": self.structure_confidence >= 0.30,
-            "language_ready": self.semantic_readiness >= 0.35,
+        # Track minimal spatial / symbolic points for SandySquare
+        point = {
+            "source": event.source,
+            "payload": event.payload,
         }
+        self._recent_points.append(point)
+
+        # Limit rolling window
+        if len(self._recent_points) > 256:
+            self._recent_points.pop(0)
+
+        # Recompute gates
+        self._recompute(event.frame)
+
+    # ========================================================
+    # Recompute gates
+    # ========================================================
+
+    def _recompute(self, frame: int):
+        """
+        Recompute pattern stability and SandySquare coherence.
+
+        IMPORTANT:
+        SandySquare returns a PHYSICS PACKET (dict),
+        not a scalar. We must extract coherence explicitly.
+        """
+
+        # --------------------------------------------
+        # Pattern stability (simple accumulation)
+        # --------------------------------------------
+        self.pattern_stability = min(
+            1.0,
+            0.01 * len(self._recent_points)
+        )
+
+        # --------------------------------------------
+        # SandySquare gate (FULL RESULT)
+        # --------------------------------------------
+        square_result = coherence_gate(
+            self._recent_points,
+            size=32
+        )
+
+        # Store full physics packet
+        self.square_coherence = square_result
+
+        # Extract scalar coherence safely
+        square_c = float(square_result.get("coherence", 0.0))
+
+        # --------------------------------------------
+        # Semantic readiness (FINAL scalar)
+        # --------------------------------------------
+        self.semantic_readiness = min(
+            1.0,
+            0.55 * float(self.pattern_stability) +
+            0.45 * square_c
+        )
+
+    # ========================================================
+    # Snapshot (for Streamlit / Manager)
+    # ========================================================
 
     def snapshot(self) -> Dict[str, Any]:
         return {
-            "frame": self.events[-1].frame if self.events else 0,
+            "events": len(self.events),
             "pattern_stability": round(self.pattern_stability, 3),
-            "structure_confidence": round(self.structure_confidence, 3),
-            "square_coherence": round(self.square_coherence, 3),
+            "square_coherence": self.square_coherence,
             "semantic_readiness": round(self.semantic_readiness, 3),
-            "manager_approval": self.manager_approval,
-            "events_count": len(self.events),
         }
