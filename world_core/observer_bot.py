@@ -1,56 +1,45 @@
+# world_core/observer_bot.py
+
+from typing import Dict, Any
+
 class ObserverBot:
     """
-    Passive cognitive sensor:
-    - sees objects and their light signatures
-    - hears sound in rooms
+    Passive perception. No interaction.
+    Reports global + nearest-room sensory summary.
     """
-    def __init__(self, name="Observer"):
+    def __init__(self, name="Observer-1"):
         self.name = name
-        self.frames = 0
         self.last = {}
 
     def observe(self, world):
-        self.frames += 1
+        # v1: find the living room and read its sound/light
+        room_snap = None
+        tv_state = None
 
-        # Find "Family House" and its living room
-        house = world.places.get("Family House")
-        seen = {"places": list(world.places.keys())}
-        heard = {"sound_level": 0.0}
-        light = {"light_level": 0.0}
-
-        tv_is_on = None
-        tv_light_color = None
-
-        if house and hasattr(house, "rooms"):
-            for room in house.rooms.values():
-                # collect room signatures
-                if hasattr(room, "get_sound_level"):
-                    heard["sound_level"] = max(heard["sound_level"], room.get_sound_level())
-                if hasattr(room, "get_light_level"):
-                    light["light_level"] = max(light["light_level"], room.get_light_level())
-
-                # TV state
-                tv = room.objects.get("tv") if hasattr(room, "objects") else None
-                if tv:
-                    tv_is_on = tv.is_on
-                    tv_light_color = tv.light.color
+        for place in world.places.values():
+            if hasattr(place, "rooms"):
+                for room in place.rooms.values():
+                    rs = room.snapshot()
+                    if rs.get("room_type") == "living_room":
+                        room_snap = rs
+                        tv = rs.get("objects", {}).get("tv")
+                        if isinstance(tv, dict):
+                            tv_state = tv.get("is_on")
+                        break
 
         self.last = {
             "source": "observer",
+            "entity": self.name,
             "name": self.name,
-            "frame": world.space.frame_counter,
+            "frame": world.frame,
             "world_space": world.space.snapshot(),
-            "seen": light,
-            "heard": heard,
-            "seen_objects": {
-                "tv_is_on": tv_is_on,
-                "tv_light_color": tv_light_color,
-            },
+            "seen_light_level": (room_snap.get("light_level") if room_snap else 0.0),
+            "seen_light_color": (room_snap.get("light_color") if room_snap else "none"),
+            "heard_sound_level": (room_snap.get("sound_level") if room_snap else 0.0),
+            "tv_state": tv_state,
+            "current_area": (room_snap.get("name") if room_snap else "world"),
+            "position_xyz": None,
         }
 
-    def snapshot(self):
-        return self.last or {
-            "source": "observer",
-            "name": self.name,
-            "frame": self.frames
-        }
+    def snapshot(self) -> Dict[str, Any]:
+        return self.last or {"source":"observer","entity":self.name,"name":self.name,"frame":0}
