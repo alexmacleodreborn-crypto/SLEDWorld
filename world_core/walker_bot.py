@@ -1,232 +1,90 @@
-# world_core/walker_bot.py
-
 import math
-import random
-from datetime import datetime
 
 
 class WalkerBot:
     """
-    Physical causal agent.
-
-    Rules:
-    - Moves continuously in world space
-    - No cognition
-    - No learning
-    - Causes physical state changes only
-    - Time is external (via WorldClock)
+    Physical agent:
+    - moves in world coordinates
+    - returns to TV position every return_interval frames
+    - toggles TV power (via remote press)
     """
 
-    def __init__(
-        self,
-        name: str,
-        start_xyz,
-        world,
-        speed_m_per_min: float = 1.2,
-        arrival_threshold: float = 0.5,
-        return_interval: int = 15,
-    ):
+    def __init__(self, name, start_xyz, world, speed=2.0, return_interval=15):
         self.name = name
         self.world = world
-
-        # -----------------------------------------
-        # Physical state
-        # -----------------------------------------
-        self.position = [
-            float(start_xyz[0]),
-            float(start_xyz[1]),
-            float(start_xyz[2]),
-        ]
-
-        self.speed = float(speed_m_per_min)
-        self.arrival_threshold = float(arrival_threshold)
-
-        # -----------------------------------------
-        # Navigation
-        # -----------------------------------------
-        self.target = None
-        self.target_label = None
+        self.xyz = tuple(start_xyz)
+        self.speed = float(speed)
         self.return_interval = int(return_interval)
 
-        # -----------------------------------------
-        # Semantic location (non-cognitive)
-        # -----------------------------------------
-        self.current_area = "world"
+        self.frames = 0
+        self.last = {}
+        self.target = None
 
-        # -----------------------------------------
-        # Time anchor
-        # -----------------------------------------
-        self._last_time = None
-        self._frame_counter = 0
+    @property
+    def position(self):
+        return self.xyz
 
-        # Bootstrap
-        self._pick_new_target()
-        self._resolve_current_area()
+    def _get_tv_and_remote(self):
+        house = self.world.places.get("Family House")
+        if not house or not hasattr(house, "rooms"):
+            return None, None, None
 
-    # =================================================
-    # WORLD TICK
-    # =================================================
+        for room in house.rooms.values():
+            if hasattr(room, "objects") and "tv" in room.objects and "remote" in room.objects:
+                return room, room.objects["tv"], room.objects["remote"]
+
+        return None, None, None
+
+    def _move_toward(self, target_xyz):
+        x, y, z = self.xyz
+        tx, ty, tz = target_xyz
+        dx = tx - x
+        dy = ty - y
+        dz = tz - z
+        dist = math.sqrt(dx*dx + dy*dy + dz*dz)
+        if dist < 1e-6:
+            return
+        step = min(self.speed, dist)
+        self.xyz = (x + dx/dist * step, y + dy/dist * step, z + dz/dist * step)
 
     def tick(self, clock):
-        now = clock.world_datetime
+        self.frames += 1
 
-        if self._last_time is None:
-            self._last_time = now
-            return
+        room, tv, remote = self._get_tv_and_remote()
+        tv_is_on = tv.is_on if tv else None
 
-        delta_seconds = (now - self._last_time).total_seconds()
-        self._last_time = now
-
-        if delta_seconds <= 0:
-            return
-
-        minutes = delta_seconds / 60.0
-        self._frame_counter += 1
-
-        self._move(minutes)
-        self._resolve_current_area()
-        self._auto_interact()
-
-    # =================================================
-    # MOVEMENT
-    # =================================================
-
-    def _move(self, minutes):
+        # every return_interval frames -> go to tv and toggle
+        if room and tv and remote and (self.frames % self.return_interval == 0):
+            self.target = tv.position
+        # if no target, wander near house
         if self.target is None:
-            self._pick_new_target()
-            return
+            self.target = (self.xyz[0] + 5.0, self.xyz[1] + 2.0, self.xyz[2])
 
-        dx = self.target[0] - self.position[0]
-        dy = self.target[1] - self.position[1]
-        dz = self.target[2] - self.position[2]
+        self._move_toward(self.target)
 
-        distance = math.sqrt(dx * dx + dy * dy + dz * dz)
+        # if reached tv, press remote and clear target
+        if tv and self.target == tv.position:
+            # close enough?
+            if math.dist(self.xyz, tv.position) < 1.5:
+                remote.press_power()
+                tv_is_on = tv.is_on
+                self.target = None
 
-        if distance <= self.arrival_threshold:
-            self._pick_new_target()
-            return
-
-        step = self.speed * minutes
-        scale = min(step / distance, 1.0)
-
-        self.position[0] += dx * scale
-        self.position[1] += dy * scale
-        self.position[2] += dz * scale
-
-    # =================================================
-    # LOCATION RESOLUTION (RESTORED)
-    # =================================================
-
-    def _resolve_current_area(self):
-        """
-        Determine which room or place the walker is currently in.
-        """
-
-        xyz = tuple(self.position)
-
-        # Rooms first (most specific)
-        for place in self.world.places.values():
-            if hasattr(place, "rooms"):
-                for room in place.rooms.values():
-                    if room.contains_world_point(xyz):
-                        self.current_area = room.name
-                        return
-
-        # Then places
-        for place in self.world.places.values():
-            if hasattr(place, "contains_world_point"):
-                if place.contains_world_point(xyz):
-                    self.current_area = place.name
-                    return
-
-        self.current_area = "world"
-
-    # =================================================
-    # TARGET SELECTION
-    # =================================================
-
-    def _pick_new_target(self):
-        """
-        Choose a random navigable point in the world.
-        """
-
-        room_targets = []
-        place_targets = []
-
-        for place in self.world.places.values():
-            if hasattr(place, "rooms"):
-                for room in place.rooms.values():
-                    if hasattr(room, "bounds"):
-                        room_targets.append((room.name, room.bounds))
-
-            if hasattr(place, "bounds"):
-                place_targets.append((place.name, place.bounds))
-
-        if room_targets:
-            label, bounds = random.choice(room_targets)
-            self.target = self._random_point_in_bounds(bounds)
-            self.target_label = label
-            return
-
-        if place_targets:
-            label, bounds = random.choice(place_targets)
-            self.target = self._random_point_in_bounds(bounds)
-            self.target_label = label
-            return
-
-        self.target = None
-        self.target_label = None
-
-    def _random_point_in_bounds(self, bounds):
-        (min_x, min_y, min_z), (max_x, max_y, max_z) = bounds
-        return [
-            random.uniform(min_x, max_x),
-            random.uniform(min_y, max_y),
-            random.uniform(min_z, max_z),
-        ]
-
-    # =================================================
-    # PHYSICAL INTERACTION
-    # =================================================
-
-    def _auto_interact(self):
-        """
-        Periodically interact with room objects (e.g. TV).
-        """
-
-        if self._frame_counter % self.return_interval != 0:
-            return
-
-        for place in self.world.places.values():
-            if not hasattr(place, "rooms"):
-                continue
-
-            for room in place.rooms.values():
-                if room.name != self.current_area:
-                    continue
-
-                if "remote" in room.objects:
-                    room.interact("remote", "power_toggle")
-                    return
-
-    # =================================================
-    # OBSERVER SNAPSHOT
-    # =================================================
-
-    def snapshot(self):
-        distance = None
-        if self.target:
-            dx = self.target[0] - self.position[0]
-            dy = self.target[1] - self.position[1]
-            dz = self.target[2] - self.position[2]
-            distance = round(math.sqrt(dx * dx + dy * dy + dz * dz), 2)
-
-        return {
+        self.last = {
             "source": "walker",
             "name": self.name,
-            "position_xyz": [round(v, 2) for v in self.position],
-            "current_area": self.current_area,
-            "destination": self.target_label,
-            "distance_to_target_m": distance,
-            "speed_m_per_min": self.speed,
+            "frame": self.world.space.frame_counter,
+            "xyz": self.xyz,
+            "target": self.target,
+            "seen_objects": {
+                "tv_is_on": tv_is_on
+            }
+        }
+
+    def snapshot(self):
+        return self.last or {
+            "source": "walker",
+            "name": self.name,
+            "frame": self.frames,
+            "xyz": self.xyz
         }
