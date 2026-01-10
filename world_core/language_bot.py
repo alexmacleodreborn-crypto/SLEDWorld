@@ -2,41 +2,56 @@
 
 class LanguageBot:
     """
-    Symbol compiler.
-    Reads stable patterns from ledger and assigns tokens (TV, ON, OFF, BRICK, WALL).
-    Stage-0: token assignment from persistence + deltas.
+    Symbol ↔ sound ↔ meaning binder.
+    No grammar. No sentences.
+    Just grounded labels.
     """
 
-    def __init__(self, name="Language-1"):
-        self.name = name
-        self.last_snapshot = {"source": "language", "name": self.name, "tokens": []}
+    def __init__(self):
+        self.name = "Language"
+        self.lexicon = {}
+        self.events = []
 
-    def observe(self, world):
-        ledger = getattr(world, "salience_investigator", None)
-        entries = getattr(ledger, "ledger", []) if ledger else []
+        self.min_repeats = 8
 
-        # Look for repeated TV signal changes (sound/light)
-        tv_events = [e for e in entries if isinstance(e, dict) and e.get("target") == "tv"]
-        sound = [e for e in tv_events if e.get("focus") == "sound"]
-        light = [e for e in tv_events if e.get("focus") == "light"]
+    def review(self, ledger):
+        sound_hits = {}
+        light_hits = {}
 
-        tokens = []
-        if len(sound) > 5:
-            tokens.append({"token": "TV_SOUND_SIGNATURE", "confidence": 0.6})
-        if len(light) > 5:
-            tokens.append({"token": "TV_LIGHT_SIGNATURE", "confidence": 0.6})
+        for e in ledger.events[-400:]:
+            if e.get("source") == "observer":
+                seen = e.get("seen_objects", {})
+                heard = e.get("heard", {})
 
-        # ON/OFF emerges from alternating delta
-        # (very simple heuristic for now)
-        if any(e.get("delta") == 1 for e in sound) and any(e.get("delta") == 0 for e in sound):
-            tokens.append({"token": "ON_OFF_STATE", "confidence": 0.5})
+                if "tv_is_on" in seen:
+                    key = "TV"
+                    sound_hits[key] = sound_hits.get(key, 0) + 1
 
-        self.last_snapshot = {
+                light = seen.get("tv_light_color")
+                if light:
+                    light_hits.setdefault(light, 0)
+                    light_hits[light] += 1
+
+        # --- Bind TV ---
+        if sound_hits.get("TV", 0) >= self.min_repeats:
+            self._bind("TV", {
+                "function": "emits_sound_and_light",
+                "light_colors": list(light_hits.keys()),
+            })
+
+    def _bind(self, word, meaning):
+        if word in self.lexicon:
+            return
+        self.lexicon[word] = meaning
+        self.events.append({
             "source": "language",
-            "name": self.name,
-            "frame": getattr(world, "frame", None),
-            "tokens": tokens
-        }
+            "word": word,
+            "meaning": meaning,
+        })
 
     def snapshot(self):
-        return self.last_snapshot
+        return {
+            "source": "language",
+            "lexicon": self.lexicon,
+            "events": self.events[-10:],
+        }
