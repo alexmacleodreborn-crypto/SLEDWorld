@@ -3,21 +3,40 @@
 """
 SandySquare — coherence gating physics
 
-Freeze-safe gate function.
-Accepts:
-- coherence_gate(sigma=..., z=..., persistence=...)
-- coherence_gate({"sigma":..., "z":..., "persistence":...})
-- coherence_gate(metrics=<dict>)
-- coherence_gate(**kwargs) with extra fields (size, area, volume, etc)
-
-If required values are missing, it FAILS CLOSED (approved=False) instead of crashing.
+Now supports:
+- Scalar sigma
+- Point-cloud sigma (list of recent events / points)
 """
 
 from typing import Dict, Any, Optional, Union
+import math
+
+
+def _derive_sigma_from_points(points) -> float:
+    """
+    Derive entropy (sigma) from a set of points.
+
+    Rule:
+    - Empty or 1 point → low entropy
+    - Widely spread points → high entropy
+    """
+
+    if not points or len(points) <= 1:
+        return 0.05
+
+    # If points are numeric, compute variance
+    if all(isinstance(p, (int, float)) for p in points):
+        mean = sum(points) / len(points)
+        var = sum((p - mean) ** 2 for p in points) / len(points)
+        return min(1.0, math.sqrt(var))
+
+    # If points are dicts/events → entropy from diversity
+    unique = len({str(p) for p in points})
+    return min(1.0, unique / max(1, len(points)))
 
 
 def coherence_gate(
-    sigma: Optional[float] = None,
+    sigma: Optional[Union[float, list]] = None,
     z: Optional[float] = None,
     persistence: Optional[float] = None,
     threshold: float = 0.55,
@@ -26,66 +45,53 @@ def coherence_gate(
     **kwargs: Any,
 ) -> Dict[str, Any]:
     """
-    SandySquare gate.
+    SandySquare coherence gate.
 
-    Required conceptual inputs (0–1):
-    - sigma: entropy / variability
-    - z: inhibition / structure
-    - persistence: stability over frames
-
-    Supports being called with a single positional dict (args[0]) or metrics=...
-    Extra kwargs are accepted and ignored unless later used.
+    Accepts:
+    - coherence_gate(sigma, z, persistence)
+    - coherence_gate(point_list, size=...)
+    - coherence_gate(metrics=dict)
     """
 
-    # -------------------------------------------------
-    # 1) If called with a single positional dict, treat it as metrics
-    # -------------------------------------------------
-    if metrics is None and len(args) == 1 and isinstance(args[0], dict):
-        metrics = args[0]
+    # ---------------------------------------------
+    # 1. Handle positional point-cloud sigma
+    # ---------------------------------------------
+    if isinstance(sigma, (list, tuple)):
+        sigma = _derive_sigma_from_points(sigma)
 
-    # -------------------------------------------------
-    # 2) Pull values from metrics dict if provided
-    # -------------------------------------------------
+    # ---------------------------------------------
+    # 2. Pull from metrics dict if provided
+    # ---------------------------------------------
     if isinstance(metrics, dict):
-        if sigma is None:
-            sigma = metrics.get("sigma", metrics.get("Sigma", metrics.get("entropy")))
-        if z is None:
-            z = metrics.get("z", metrics.get("Z", metrics.get("trap")))
-        if persistence is None:
-            persistence = metrics.get("persistence", metrics.get("stable", metrics.get("stability")))
+        sigma = metrics.get("sigma", sigma)
+        z = metrics.get("z", z)
+        persistence = metrics.get("persistence", persistence)
 
-    # -------------------------------------------------
-    # 3) Pull values from kwargs (common in pipelines)
-    # -------------------------------------------------
+    # ---------------------------------------------
+    # 3. Pull from kwargs
+    # ---------------------------------------------
+    sigma = kwargs.get("sigma", sigma)
+    z = kwargs.get("z", z)
+    persistence = kwargs.get("persistence", persistence)
+
+    # ---------------------------------------------
+    # 4. Fail-closed defaults
+    # ---------------------------------------------
     if sigma is None:
-        sigma = kwargs.get("sigma", kwargs.get("Sigma"))
+        sigma = 1.0
     if z is None:
-        z = kwargs.get("z", kwargs.get("Z"))
+        z = 0.0
     if persistence is None:
-        persistence = kwargs.get("persistence", kwargs.get("stability"))
+        persistence = 0.0
 
-    # -------------------------------------------------
-    # 4) Fail-closed if still missing
-    # -------------------------------------------------
-    missing = []
-    if sigma is None:
-        missing.append("sigma")
-        sigma = 1.0  # worst-case entropy
-    if z is None:
-        missing.append("z")
-        z = 0.0      # no structure
-    if persistence is None:
-        missing.append("persistence")
-        persistence = 0.0  # no stability
-
-    # Clamp to [0,1] safely
+    # Clamp
     sigma = float(max(0.0, min(1.0, sigma)))
     z = float(max(0.0, min(1.0, z)))
     persistence = float(max(0.0, min(1.0, persistence)))
 
-    # -------------------------------------------------
-    # 5) Core SandySquare physics
-    # -------------------------------------------------
+    # ---------------------------------------------
+    # 5. SandySquare physics
+    # ---------------------------------------------
     divergence = sigma * (1.0 - z)
     coherence = max(
         0.0,
@@ -95,9 +101,9 @@ def coherence_gate(
         ),
     )
 
-    approved = (coherence >= float(threshold)) and (len(missing) == 0)
+    approved = coherence >= threshold
 
-    out = {
+    return {
         "sigma": round(sigma, 4),
         "z": round(z, 4),
         "persistence": round(persistence, 4),
@@ -105,9 +111,3 @@ def coherence_gate(
         "coherence": round(coherence, 4),
         "approved": approved,
     }
-
-    if missing:
-        out["missing_inputs"] = missing
-        out["note"] = "Gate failed closed due to missing inputs."
-
-    return out
