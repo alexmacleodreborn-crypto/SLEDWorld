@@ -1,19 +1,18 @@
 import streamlit as st
-import matplotlib.pyplot as plt
-import numpy as np
 
 from world_core.bootstrap import build_world
 from world_core.world_clock import WorldClock
 
-
 # ==================================================
 # Streamlit config
 # ==================================================
-st.set_page_config(page_title="SLEDWorld – Pattern → Symbols → Language", layout="wide")
-
+st.set_page_config(
+    page_title="SLEDWorld – Reality Frame",
+    layout="wide"
+)
 
 # ==================================================
-# Session init (persist across reruns)
+# Session initialisation
 # ==================================================
 if "clock" not in st.session_state:
     st.session_state.clock = WorldClock(acceleration=1)
@@ -24,161 +23,147 @@ if "world" not in st.session_state:
 clock = st.session_state.clock
 world = st.session_state.world
 
+# ==================================================
+# Sidebar – World Advancement
+# ==================================================
+st.sidebar.header("World Advancement")
 
-# ==================================================
-# Header + instructions
-# ==================================================
-st.title("SLEDWorld – Pattern → Symbols → Language")
-st.caption(
-    "Use **Advance** to step the world. The Manager reviews ledger events, applies Sandy-gating, "
-    "and finalizes learning approvals."
+advance_steps = st.sidebar.slider(
+    "Advance frames",
+    min_value=1,
+    max_value=20,
+    value=1,
 )
 
-colA, colB, colC = st.columns([1, 1, 2])
+if st.sidebar.button("▶ Advance World"):
+    for _ in range(advance_steps):
+        clock.tick(minutes=1)
+        world.tick()
 
-with colA:
-    steps = st.number_input("Advance steps", min_value=1, max_value=200, value=5, step=1)
-with colB:
-    if st.button("▶ Advance"):
-        for _ in range(int(steps)):
-            clock.tick(minutes=1)
-            world.tick()
+st.sidebar.divider()
 
-with colC:
-    if st.button("Reset world"):
-        st.session_state.pop("world", None)
-        st.session_state.pop("clock", None)
-        st.rerun()
-
+if st.sidebar.button("Reset World"):
+    st.session_state.pop("world", None)
+    st.session_state.pop("clock", None)
+    st.rerun()
 
 # ==================================================
-# World state summary
+# Main Display
 # ==================================================
+st.title("SLEDWorld – Reality Frame")
+
+# --------------------------
+# World State
+# --------------------------
 st.subheader("World State")
+
 st.json({
     "frame": world.frame,
-    "weather": world.space.snapshot(),
     "places": list(world.places.keys()),
     "num_places": len(world.places),
     "num_agents": len(world.agents),
     "num_scouts": len(world.scouts),
 })
 
-
-# ==================================================
-# Aerial plot (places + agents)
-# ==================================================
-st.subheader("Aerial Plot")
-
-fig, ax = plt.subplots(figsize=(7, 4))
-ax.set_title(f"World frame: {world.space.frame_counter}")
-ax.set_xlabel("X")
-ax.set_ylabel("Y")
-ax.grid(alpha=0.2)
-
-# Places
-for place in world.places.values():
-    p = getattr(place, "position", None)
-    b = getattr(place, "bounds", None)
-    if p is not None:
-        ax.scatter([p[0]], [p[1]])
-        ax.text(p[0] + 5, p[1] + 5, place.name, fontsize=9)
-    if b:
-        (minx, miny, _), (maxx, maxy, _) = b
-        rect_x = [minx, maxx, maxx, minx, minx]
-        rect_y = [miny, miny, maxy, maxy, miny]
-        ax.plot(rect_x, rect_y)
-
-# Agents
-for agent in world.agents:
-    pos = getattr(agent, "position", None) or getattr(agent, "xyz", None)
-    if pos:
-        ax.scatter([pos[0]], [pos[1]], marker="x")
-        ax.text(pos[0] + 5, pos[1] - 10, agent.name, fontsize=8)
-
-st.pyplot(fig)
-
-
-# ==================================================
-# Objects (rooms, TV, remote)
-# ==================================================
-st.subheader("Places → Rooms → Objects")
+# --------------------------
+# World Geometry & Objects
+# --------------------------
+st.subheader("World Geometry & Objects")
 
 for place in world.places.values():
     with st.expander(f"Place: {place.name}", expanded=False):
-        st.json(place.snapshot() if hasattr(place, "snapshot") else {"name": place.name})
+        st.json({
+            "position": getattr(place, "position", None),
+            "bounds": getattr(place, "bounds", None),
+        })
 
         if hasattr(place, "rooms"):
             for room in place.rooms.values():
                 with st.expander(f"Room: {room.name}", expanded=False):
                     st.json(room.snapshot())
 
+# --------------------------
+# Agents (Walker / Observer)
+# --------------------------
+st.subheader("World Agents")
 
-# ==================================================
-# Bots (Observer, Walker, Scouts, Surveyor)
-# ==================================================
-st.subheader("Bots")
+for agent in world.agents:
+    if hasattr(agent, "snapshot"):
+        st.json(agent.snapshot())
 
-tabs = st.tabs(["Observer", "Walker", "Scouts", "Surveyor", "Manager", "Ledger"])
+# --------------------------
+# Scouts (Sound / Light)
+# --------------------------
+st.subheader("Scouts")
 
-with tabs[0]:
-    obs = world.get_agent("ObserverBot")
-    if obs:
-        st.json(obs.snapshot())
-    else:
-        st.warning("ObserverBot not found.")
-
-with tabs[1]:
-    walker = world.get_agent("WalkerBot")
-    if walker:
-        st.json(walker.snapshot())
-    else:
-        st.warning("WalkerBot not found.")
-
-with tabs[2]:
-    show_sound = st.checkbox("Show sound grid", value=True)
-    show_light = st.checkbox("Show light grid", value=True)
-
-    if not world.scouts:
-        st.info("No scouts active.")
+if world.scouts:
     for scout in world.scouts:
         snap = scout.snapshot()
-        name = snap.get("name", "Scout")
-        frame = snap.get("frame", "?")
-        with st.expander(f"{name} · frame {frame}", expanded=False):
-            st.json({k: v for k, v in snap.items() if k not in ("sound_grid", "light_grid", "occupancy")})
+        if snap:
+            st.json(snap)
+else:
+    st.write("No active scouts.")
 
-            if show_sound and "sound_grid" in snap and snap["sound_grid"] is not None:
-                st.write("Sound grid")
-                st.image(np.array(snap["sound_grid"], dtype=np.float32), clamp=True)
+# --------------------------
+# Surveyor (Geometry)
+# --------------------------
+st.subheader("Surveyor")
 
-            if show_light and "light_grid" in snap and snap["light_grid"] is not None:
-                st.write("Light grid")
-                st.image(np.array(snap["light_grid"], dtype=np.float32), clamp=True)
+if world.surveyor:
+    st.json(world.surveyor.snapshot())
+else:
+    st.write("No surveyor present.")
 
-            if "occupancy" in snap and snap["occupancy"] is not None:
-                st.write("Occupancy (shape)")
-                st.image(np.array(snap["occupancy"], dtype=np.float32), clamp=True)
+# --------------------------
+# Ledger (Sandy’s Law Gate)
+# --------------------------
+st.subheader("Ledger (Accounting Layer)")
 
-with tabs[3]:
-    if world.surveyor:
-        snap = world.surveyor.snapshot()
-        st.json({k: v for k, v in snap.items() if k not in ("volume", "surface_volume")})
+ledger = world.ledger
 
-        # cheap aerial occupancy: sum along z
-        if "volume" in snap and snap["volume"] is not None:
-            vol = np.array(snap["volume"], dtype=np.int8)
-            aerial = vol.sum(axis=0)
-            st.write("Surveyor aerial occupancy (sum over Z)")
-            st.image(aerial, clamp=True)
-    else:
-        st.warning("Surveyor not present.")
+st.metric("Frames Recorded", ledger.frame_counter)
+st.metric("Total Events", len(ledger.events))
 
-with tabs[4]:
-    st.json(world.manager.snapshot())
-    st.write("Approvals")
-    st.json(world.manager.approvals[-20:])
+with st.expander("Recent Ledger Events", expanded=False):
+    st.json(ledger.events[-15:])
 
-with tabs[5]:
-    st.metric("Ledger events", len(world.ledger.events))
-    st.json(world.ledger.events[-20:] if world.ledger.events else [])
+# --------------------------
+# Architect
+# --------------------------
+st.subheader("Architect (Pattern Recognition)")
+st.json(world.architect.snapshot())
+
+# --------------------------
+# Builder
+# --------------------------
+st.subheader("Builder (Structure Confirmation)")
+st.json(world.builder.snapshot())
+
+# --------------------------
+# Language
+# --------------------------
+st.subheader("Language (Symbol Binding)")
+st.json(world.language.snapshot())
+
+# --------------------------
+# Weather (Placeholder – correct for now)
+# --------------------------
+st.subheader("World Conditions")
+
+st.json({
+    "weather": "clear",
+    "light_cycle": "static",
+    "wind": "none",
+    "note": "World conditions not yet active (pre-A7DO)",
+})
+
+# ==================================================
+# Footer
+# ==================================================
+st.caption(
+    "Reality exists first. "
+    "Perception follows. "
+    "Structure emerges. "
+    "Language is grounded. "
+    "A7DO not yet born."
+)
