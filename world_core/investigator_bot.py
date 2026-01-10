@@ -1,68 +1,70 @@
-# world_core/investigator_bot.py
-
-from typing import Dict, Any, List
-from world_core.ledger_event import LedgerEvent
+from world_core.ledger import LedgerEvent
 
 class InvestigatorBot:
     """
-    Process bot. Normalises streams into LedgerEvents.
-    No approvals. No semantics.
+    Normalises raw snapshots into ledger events.
+    No semantics. No names. Just numeric evidence.
     """
-    def __init__(self, name="Investigator-1"):
-        self.name = name
-        self.frame_counter = 0
-        self.buffer: List[LedgerEvent] = []
 
-    def ingest_snapshot(self, frame: int, snap: Dict[str, Any]) -> List[LedgerEvent]:
-        self.frame_counter = frame
-        out: List[LedgerEvent] = []
+    def ingest_snapshot(self, frame: int, snap: dict):
+        out = []
+        if not isinstance(snap, dict):
+            return out
 
-        source = snap.get("source", "unknown")
-        entity = snap.get("entity", snap.get("name", source))
+        src = snap.get("source", "unknown")
 
-        # Heuristics per source type
-        if source in ("observer", "walker"):
-            payload = {
-                "position_xyz": snap.get("position_xyz"),
-                "current_area": snap.get("current_area"),
-                "heard_sound_level": snap.get("heard_sound_level"),
-                "seen_light_level": snap.get("seen_light_level"),
-                "seen_light_color": snap.get("seen_light_color"),
-                "tv_state": snap.get("tv_state"),
-            }
-            out.append(LedgerEvent(frame=frame, source=source, entity=entity, kind="percept", payload=payload, confidence=0.6))
+        # Walker interactions
+        if src == "walker":
+            if snap.get("last_interaction"):
+                out.append(LedgerEvent(
+                    frame=frame,
+                    source="walker",
+                    kind="walker_interaction",
+                    payload={
+                        "interaction": snap.get("last_interaction"),
+                        "points_xy": snap.get("points_xy", []),
+                    }
+                ))
 
-            # Add a point for square gate (map x,y into 32x32 roughly)
-            pos = snap.get("position_xyz")
-            if isinstance(pos, list) and len(pos) >= 2:
-                y = int(abs(pos[1]) % 32)
-                x = int(abs(pos[0]) % 32)
-                out.append(LedgerEvent(frame=frame, source=source, entity=entity, kind="point", payload={"point_yx": (y, x)}, confidence=0.4))
+        # Scout peaks
+        if src == "scout" and snap.get("mode") == "sound":
+            pts = snap.get("peak_points_xy", [])
+            if pts:
+                out.append(LedgerEvent(
+                    frame=frame,
+                    source="scout:sound",
+                    kind="sound_peaks",
+                    payload={"points_xy": pts}
+                ))
 
-        elif source in ("scout",):
-            out.append(LedgerEvent(frame=frame, source=source, entity=entity, kind="field", payload={
-                "mode": snap.get("mode"),
-                "center_xyz": snap.get("center_xyz"),
-                "resolution_m": snap.get("resolution_m"),
-                "extent_m": snap.get("extent_m"),
-                "summary": snap.get("summary"),
-            }, confidence=0.55))
+        if src == "scout" and snap.get("mode") == "light":
+            pts = snap.get("peak_points_xy", [])
+            if pts:
+                out.append(LedgerEvent(
+                    frame=frame,
+                    source="scout:light",
+                    kind="light_peaks",
+                    payload={"points_xy": pts}
+                ))
 
-        elif source in ("surveyor",):
-            out.append(LedgerEvent(frame=frame, source=source, entity=entity, kind="survey", payload={
-                "center_xyz": snap.get("center_xyz"),
-                "resolution_m": snap.get("resolution_m"),
-                "volume_shape": snap.get("volume_shape"),
-            }, confidence=0.65))
+        # Surveyor surface points
+        if src == "surveyor":
+            pts = snap.get("surface_points_xy", [])
+            if pts:
+                out.append(LedgerEvent(
+                    frame=frame,
+                    source="surveyor",
+                    kind="surface_points",
+                    payload={"points_xy": pts}
+                ))
 
-        elif source in ("symbol", "language"):
-            out.append(LedgerEvent(frame=frame, source=source, entity=entity, kind="symbol", payload=snap, confidence=snap.get("confidence", 0.5)))
+        # Language events (when present)
+        if src == "language":
+            out.append(LedgerEvent(
+                frame=frame,
+                source="language",
+                kind="language_event",
+                payload=snap
+            ))
 
         return out
-
-    def snapshot(self) -> Dict[str, Any]:
-        return {
-            "source": "investigator",
-            "name": self.name,
-            "frame_counter": self.frame_counter,
-        }
