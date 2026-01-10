@@ -1,11 +1,9 @@
-# world_core/light/light_source.py
-
 from __future__ import annotations
 
 class LightSource:
     def __init__(self, name, position, base_level=0.8):
         self.name = name
-        self.position = position
+        self.position = tuple(position)
         self.base_level = float(base_level)
         self.active = False
         self.color = "red"
@@ -15,4 +13,4 @@ class LightSource:
         self.color = str(color)
 
     def level(self) -> float:
-        return round(self.base_level if self.active else 0.0, 3)
+        return round(self.base_level if self.active else 0.1, 3)  # standby glow
