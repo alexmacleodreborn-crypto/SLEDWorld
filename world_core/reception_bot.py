@@ -1,25 +1,37 @@
-# world_core/reception_bot.py
-from typing import Dict, Any
-
 class ReceptionBot:
-    def __init__(self, name="Reception-1"):
-        self.name = name
-        self.registry = {"symbols":{}, "objects":{}, "places":{}, "people":{}, "animals":{}}
+    """
+    Indexes world entities into a registry (names are not “understood”, just stored).
+    """
+    def __init__(self):
+        self.registry = {"places": {}, "rooms": {}, "objects": {}}
+        self.accepted_symbols = []
+
+    def accept_symbol(self, sym):
+        self.accepted_symbols.append(sym)
 
     def update(self, world):
-        # index places and any profile-level objects
-        for pname, place in world.places.items():
-            self.registry["places"][pname] = {"type": getattr(place, "type", "place")}
+        # places
+        for name, place in world.places.items():
+            self.registry["places"][name] = getattr(place, "snapshot", lambda: {"name": name})()
 
-        # index people/animals if present
-        for p in getattr(world, "people", []):
-            self.registry["people"][p.name] = {"age": p.age, "home": p.home_name}
+            # rooms/objects if present
+            if hasattr(place, "rooms"):
+                for rname, room in place.rooms.items():
+                    self.registry["rooms"][rname] = room.snapshot()
+                    if hasattr(room, "objects"):
+                        for oname, obj in room.objects.items():
+                            # may not have snapshot
+                            if hasattr(obj, "snapshot"):
+                                self.registry["objects"][f"{rname}:{oname}"] = obj.snapshot()
+                            else:
+                                self.registry["objects"][f"{rname}:{oname}"] = {"name": str(obj)}
 
-        for a in getattr(world, "animals", []):
-            self.registry["animals"][a.name] = {"species": a.species, "color": a.color}
-
-    def accept_symbol(self, symbol: str):
-        self.registry["symbols"][symbol] = {"status":"approved"}
-
-    def snapshot(self) -> Dict[str, Any]:
-        return {"source":"reception","name":self.name,"registry": self.registry}
+    def snapshot(self):
+        return {
+            "source": "reception",
+            "counts": {
+                "places": len(self.registry["places"]),
+                "rooms": len(self.registry["rooms"]),
+                "objects": len(self.registry["objects"]),
+            }
+        }
