@@ -1,4 +1,4 @@
-# world_core.scout.py
+# world_core/scout.py
 
 import math
 
