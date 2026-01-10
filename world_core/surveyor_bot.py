@@ -1,33 +1,25 @@
-# world_core/surveyor_bot.py
-
 from dataclasses import dataclass, field
 from typing import Dict, Tuple, Any, List
-
+import numpy as np
 
 @dataclass
 class SurveyorBot:
     """
-    3D geometry surveyor.
-    Builds a voxel volume and surface map.
-    No cognition. No interaction. No language.
+    3D geometry surveyor (lightweight).
+    Produces a 2D surface slice + a small list of surface points for the ledger.
     """
-
     name: str
     center_xyz: Tuple[float, float, float]
-    extent_m: float = 10.0
-    resolution_m: float = 1.0
-    height_m: float = 6.0
-    max_frames: int = 999999
+    extent_m: float = 40.0
+    resolution_m: float = 2.0
+    height_m: float = 8.0
 
     active: bool = True
     frames: int = 0
 
-    volume: List[List[List[int]]] = field(default_factory=list)
-    surface_volume: List[List[List[int]]] = field(default_factory=list)
-
+    _surface_slice: np.ndarray = field(default_factory=lambda: np.zeros((1, 1), dtype=float))
+    _surface_points_xy: List[Tuple[int, int]] = field(default_factory=list)
     last_snapshot: Dict[str, Any] = field(default_factory=dict)
-
-    # -------------------------------------------------
 
     def _is_solid(self, world, x, y, z) -> bool:
         for place in world.places.values():
@@ -39,73 +31,63 @@ class SurveyorBot:
                         return True
         return False
 
-    # -------------------------------------------------
-
     def observe(self, world):
         if not self.active:
             return
-
         self.frames += 1
-        if self.frames > self.max_frames:
-            self.active = False
-            return
 
         cx, cy, cz = self.center_xyz
-        r = self.extent_m
-        step = self.resolution_m
-        h = self.height_m
+        r = float(self.extent_m)
+        step = float(self.resolution_m)
 
-        nx = int((2 * r) / step)
-        ny = nx
-        nz = int(h / step)
+        n = int((2*r) / step)
+        n = max(8, min(128, n))
+        z = cz + 1.0  # sample at ~human height
 
-        vol = [[[0 for _ in range(nx)] for __ in range(ny)] for ___ in range(nz)]
+        surf = np.zeros((n, n), dtype=float)
 
-        for iz in range(nz):
-            z = cz + iz * step
-            for iy in range(ny):
-                y = cy - r + iy * step
-                for ix in range(nx):
-                    x = cx - r + ix * step
-                    if self._is_solid(world, x, y, z):
-                        vol[iz][iy][ix] = 1
+        # Mark solid vs air on slice
+        for iy in range(n):
+            y = cy - r + iy * step
+            for ix in range(n):
+                x = cx - r + ix * step
+                surf[iy, ix] = 1.0 if self._is_solid(world, x, y, z) else 0.0
 
-        # Extract surface voxels
-        surf = [[[0 for _ in range(nx)] for __ in range(ny)] for ___ in range(nz)]
-        for z in range(1, nz - 1):
-            for y in range(1, ny - 1):
-                for x in range(1, nx - 1):
-                    if vol[z][y][x] == 1:
-                        if (
-                            vol[z-1][y][x] == 0 or vol[z+1][y][x] == 0 or
-                            vol[z][y-1][x] == 0 or vol[z][y+1][x] == 0 or
-                            vol[z][y][x-1] == 0 or vol[z][y][x+1] == 0
-                        ):
-                            surf[z][y][x] = 1
+        self._surface_slice = surf
 
-        self.volume = vol
-        self.surface_volume = surf
+        # Extract a small set of boundary points (surface points)
+        pts = []
+        for iy in range(1, n-1):
+            for ix in range(1, n-1):
+                if surf[iy, ix] == 1.0:
+                    if (
+                        surf[iy-1, ix] == 0.0 or surf[iy+1, ix] == 0.0 or
+                        surf[iy, ix-1] == 0.0 or surf[iy, ix+1] == 0.0
+                    ):
+                        gx = int((ix / max(1, n-1)) * 31)
+                        gy = int((iy / max(1, n-1)) * 31)
+                        pts.append((gx, gy))
+
+        # keep small
+        self._surface_points_xy = pts[:80]
 
         self.last_snapshot = {
             "source": "surveyor",
-            "entity": self.name,
             "name": self.name,
-            "frame": world.frame,
+            "frame": getattr(world, "frame", self.frames),
             "active": self.active,
             "center_xyz": self.center_xyz,
             "resolution_m": step,
-            "extent_m": r,
-            "volume_shape": (nz, ny, nx),
-            "solid_voxels": sum(sum(sum(row) for row in plane) for plane in vol),
-            "surface_voxels": sum(sum(sum(row) for row in plane) for plane in surf),
+            "surface_points_xy": self._surface_points_xy,
+            "surface_shape": tuple(self._surface_slice.shape),
         }
 
-    # -------------------------------------------------
+    def surface_slice_2d(self):
+        return self._surface_slice if self._surface_slice.size else None
 
     def snapshot(self) -> Dict[str, Any]:
         return self.last_snapshot or {
             "source": "surveyor",
-            "entity": self.name,
             "name": self.name,
             "active": self.active,
             "frame": self.frames,
