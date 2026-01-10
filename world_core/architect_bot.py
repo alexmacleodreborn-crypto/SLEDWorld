@@ -1,18 +1,19 @@
-# world_core/architect_bot.py
-from typing import Dict, Any, List
-
 class ArchitectBot:
-    def __init__(self, name="Architect-1"):
-        self.name = name
-        self.plans: List[Dict[str, Any]] = []
+    """
+    Dormant until gates+approval.
+    Produces simple structure plans from registry.
+    """
+    def __init__(self):
+        self._plans = []
 
-    def generate(self, reception_registry: Dict[str, Any]):
-        # Minimal v1: emit a plan stub once places exist
-        if reception_registry.get("places") and not self.plans:
-            self.plans.append({"type":"world_schema","confidence":0.5,"places": list(reception_registry["places"].keys())})
+    def generate(self, registry):
+        # Minimal demo: if rooms exist, propose a "structure plan"
+        if registry.get("rooms"):
+            self._plans.append({
+                "type": "structure_plan",
+                "summary": f"{len(registry['rooms'])} rooms observed",
+            })
+        self._plans = self._plans[-20:]
 
     def plans_tail(self, n=10):
-        return self.plans[-n:]
-
-    def snapshot(self):
-        return {"source":"architect","name":self.name,"plans_tail": self.plans[-10:]}
+        return self._plans[-int(n):]
