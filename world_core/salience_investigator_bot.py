@@ -1,29 +1,47 @@
-class SalienceLedger:
+# world_core/salience_investigator_bot.py
+
+class SalienceInvestigatorBot:
     """
-    Ledger is the final authority.
-    All bots write here. Manager reads here and approves.
+    Central transaction ledger.
+    This is NOT a thinker.
+    It only records, tags, and gates information.
     """
 
     def __init__(self):
+        self.name = "Ledger"
         self.events = []
-        self.counter = 0
+        self.frame_counter = 0
 
-    def ingest(self, snap: dict, world=None):
-        if not isinstance(snap, dict):
+    # -------------------------------------------------
+    # INGEST (single gate for Sandy’s Law)
+    # -------------------------------------------------
+
+    def ingest(self, event: dict, world=None):
+        """
+        Record an event if valid.
+        """
+        if not isinstance(event, dict):
             return
 
-        self.counter += 1
-        event = dict(snap)
+        self.frame_counter += 1
 
-        # normalize metadata
-        if "frame" not in event and world is not None and hasattr(world, "space"):
-            event["frame"] = world.space.frame_counter
+        record = dict(event)
+        record["_frame"] = self.frame_counter
 
-        if "source" not in event:
-            event["source"] = event.get("type", "unknown")
+        # Optional world context (safe)
+        if world is not None:
+            record["_world_frame"] = getattr(world, "frame", None)
 
-        event["_id"] = self.counter
-        self.events.append(event)
+        self.events.append(record)
 
-    def last(self, n=20):
-        return self.events[-n:]
+    # -------------------------------------------------
+    # Snapshot for Streamlit
+    # -------------------------------------------------
+
+    def snapshot(self):
+        return {
+            "source": "ledger",
+            "frames": self.frame_counter,
+            "events_recorded": len(self.events),
+            "recent_events": self.events[-10:],
+        }
