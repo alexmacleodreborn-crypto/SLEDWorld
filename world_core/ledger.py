@@ -1,99 +1,96 @@
-# world_core/ledger.py
-
-from dataclasses import dataclass, field
-from typing import List, Dict, Any
-
+from dataclasses import dataclass, asdict
+from typing import Dict, Any, List
 from world_core.sandys_square import coherence_gate
-
-
-# ============================================================
-# Ledger Event
-# ============================================================
 
 @dataclass
 class LedgerEvent:
-    """
-    Atomic record of a world observation or inference.
-    """
     frame: int
     source: str
+    kind: str
     payload: Dict[str, Any]
 
+    def to_dict(self):
+        return asdict(self)
 
-# ============================================================
-# Ledger Core
-# ============================================================
-
-@dataclass
 class Ledger:
     """
-    Central truth table of the world.
+    Stores events and computes Sandy gates from numeric evidence.
     """
+    def __init__(self):
+        self.events: List[Dict[str, Any]] = []
+        self._recent_points = []  # for SandySquare coherence
+        self._max_points = 400
 
-    events: List[LedgerEvent] = field(default_factory=list)
+        # gates + scores
+        self.object_stability = 0.0
+        self.structure_stability = 0.0
+        self.symbol_readiness = 0.0
+        self.language_readiness = 0.0
 
-    # Rolling metrics
-    pattern_stability: float = 0.0
-    square_coherence: Dict[str, Any] = field(default_factory=dict)
-    semantic_readiness: float = 0.0
+        self.object_stable = False
+        self.structure_stable = False
+        self.symbol_ready = False
+        self.language_ready = False
 
-    # Internal buffers
-    _recent_points: List[Dict[str, Any]] = field(default_factory=list)
+    def ingest(self, ev: LedgerEvent):
+        d = ev.to_dict()
+        self.events.append(d)
 
-    # ========================================================
-    # Ingest
-    # ========================================================
+        # Collect “reaction points” from sensors:
+        # - walker interactions
+        # - scout peaks
+        # - surveyor surface hits
+        p = d.get("payload", {})
+        pts = p.get("points_xy")
+        if isinstance(pts, list):
+            for xy in pts:
+                if isinstance(xy, (list, tuple)) and len(xy) == 2:
+                    self._recent_points.append((int(xy[0]), int(xy[1])))
 
-    def ingest(self, event: LedgerEvent):
-        self.events.append(event)
+        if len(self._recent_points) > self._max_points:
+            self._recent_points = self._recent_points[-self._max_points:]
 
-        self._recent_points.append({
-            "source": event.source,
-            "payload": event.payload,
-        })
+    def tail(self, n=50):
+        return self.events[-int(n):]
 
-        if len(self._recent_points) > 256:
-            self._recent_points.pop(0)
+    def recompute_gates(self):
+        # coherence from SandySquare (0..1)
+        coh = coherence_gate(self._recent_points, grid_size=32)
 
-        self._recompute(event.frame)
+        # crude stability proxies:
+        #  - object stability rises when we see repeated interaction + correlated field peaks
+        #  - structure stability rises when surveyor produces consistent surface points
+        #  - symbol readiness rises when object stability and coherence are high
+        #  - language readiness rises later
 
-    # ========================================================
-    # Rolling access (FIX)
-    # ========================================================
+        recent = self.tail(200)
 
-    def tail(self, n: int = 50) -> List[LedgerEvent]:
-        """
-        Return the last n ledger events.
-        REQUIRED by Concierge / Manager layers.
-        """
-        return self.events[-n:]
+        walker_hits = sum(1 for e in recent if e["kind"] == "walker_interaction")
+        sound_hits = sum(1 for e in recent if e["kind"] == "sound_peaks")
+        light_hits = sum(1 for e in recent if e["kind"] == "light_peaks")
+        surf_hits = sum(1 for e in recent if e["kind"] == "surface_points")
 
-    # ========================================================
-    # Recompute gates
-    # ========================================================
+        # normalize to 0..1
+        self.object_stability = min(1.0, 0.25*min(1.0, walker_hits/6) + 0.25*min(1.0, sound_hits/8) + 0.25*min(1.0, light_hits/8) + 0.25*coh)
+        self.structure_stability = min(1.0, 0.6*min(1.0, surf_hits/10) + 0.4*coh)
 
-    def _recompute(self, frame: int):
-        self.pattern_stability = min(1.0, 0.01 * len(self._recent_points))
+        self.symbol_readiness = min(1.0, 0.65*self.object_stability + 0.35*coh)
+        self.language_readiness = min(1.0, 0.55*self.symbol_readiness + 0.45*self.structure_stability)
 
-        square_result = coherence_gate(self._recent_points, size=32)
-        self.square_coherence = square_result
+        # thresholds
+        self.object_stable = self.object_stability >= 0.55
+        self.structure_stable = self.structure_stability >= 0.55
+        self.symbol_ready = self.symbol_readiness >= 0.60
+        self.language_ready = self.language_readiness >= 0.75
 
-        square_c = float(square_result.get("coherence", 0.0))
-
-        self.semantic_readiness = min(
-            1.0,
-            0.55 * self.pattern_stability +
-            0.45 * square_c
-        )
-
-    # ========================================================
-    # Snapshot
-    # ========================================================
-
-    def snapshot(self) -> Dict[str, Any]:
+    def gates_snapshot(self):
         return {
-            "events": len(self.events),
-            "pattern_stability": round(self.pattern_stability, 3),
-            "square_coherence": self.square_coherence,
-            "semantic_readiness": round(self.semantic_readiness, 3),
+            "object_stability": float(self.object_stability),
+            "structure_stability": float(self.structure_stability),
+            "symbol_readiness": float(self.symbol_readiness),
+            "language_readiness": float(self.language_readiness),
+            "object_stable": bool(self.object_stable),
+            "structure_stable": bool(self.structure_stable),
+            "symbol_ready": bool(self.symbol_ready),
+            "language_ready": bool(self.language_ready),
         }
