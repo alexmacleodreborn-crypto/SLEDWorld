@@ -1,83 +1,30 @@
-# world_core/concierge_bot.py
-
-from typing import List
-from world_core.ledger import LedgerEvent
-
-
 class ConciergeBot:
     """
-    Interpretation layer.
-
-    - Reads ledger events
-    - Proposes candidate meaning bundles
-    - Maintains short proposal history
+    Proposes symbol candidates from stable ledger evidence.
+    Dormant unless called.
     """
+    def __init__(self):
+        self._proposals = []
 
-    def __init__(self, tail_size: int = 50):
-        self.last_proposal = None
-        self.proposals_tail: List[dict] = []
-        self.tail_size = int(tail_size)
+    def propose(self, ledger_tail):
+        # ledger_tail is list[dict]
+        # naive: if we see repeated walker interactions + peaks, propose "object_candidate"
+        w = sum(1 for e in ledger_tail if e.get("kind") == "walker_interaction")
+        s = sum(1 for e in ledger_tail if e.get("kind") == "sound_peaks")
+        l = sum(1 for e in ledger_tail if e.get("kind") == "light_peaks")
 
-    # =========================================================
-    # Propose meaning from ledger events
-    # =========================================================
+        if w >= 3 and (s + l) >= 5:
+            self._proposals.append({
+                "source": "concierge",
+                "proposal_type": "symbol_candidate",
+                "symbol_candidate": {
+                    "kind": "DEVICE",
+                    "hint": "repeating toggle-correlated emitter",
+                }
+            })
 
-    def propose(self, events: List[LedgerEvent]):
-        if not events:
-            self.last_proposal = None
-            return None
+        # keep tail short
+        self._proposals = self._proposals[-50:]
 
-        bundle = {
-            "frames": [],
-            "sources": set(),
-            "objects": set(),
-            "signals": {
-                "sound": False,
-                "light": False,
-                "shape": False,
-            }
-        }
-
-        for e in events:
-            payload = e.payload or {}
-
-            bundle["frames"].append(e.frame)
-            bundle["sources"].add(e.source)
-
-            if payload.get("sound_level", 0) > 0:
-                bundle["signals"]["sound"] = True
-
-            if payload.get("light_level", 0) > 0:
-                bundle["signals"]["light"] = True
-
-            if payload.get("shape_id"):
-                bundle["signals"]["shape"] = True
-                bundle["objects"].add(payload["shape_id"])
-
-            if payload.get("object"):
-                bundle["objects"].add(payload["object"])
-
-        # normalise
-        bundle["sources"] = sorted(bundle["sources"])
-        bundle["objects"] = sorted(bundle["objects"])
-
-        # store
-        self.last_proposal = bundle
-        self.proposals_tail.append(bundle)
-
-        # trim history
-        if len(self.proposals_tail) > self.tail_size:
-            self.proposals_tail = self.proposals_tail[-self.tail_size :]
-
-        return bundle
-
-    # =========================================================
-    # Snapshot
-    # =========================================================
-
-    def snapshot(self):
-        return {
-            "active": True,
-            "last_proposal": self.last_proposal,
-            "proposals_tail": self.proposals_tail[-10:],  # safe UI view
-        }
+    def proposals_tail(self, n=20):
+        return self._proposals[-int(n):]
