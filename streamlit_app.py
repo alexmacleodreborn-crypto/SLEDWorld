@@ -7,12 +7,12 @@ from world_core.world_clock import WorldClock
 # Streamlit config
 # ==================================================
 st.set_page_config(
-    page_title="SLEDWorld – Reality Frame",
-    layout="wide"
+    page_title="SLEDWorld — Manager Overview",
+    layout="wide",
 )
 
 # ==================================================
-# Session initialisation
+# Canonical session bootstrap (DO NOT DUPLICATE)
 # ==================================================
 if "clock" not in st.session_state:
     st.session_state.clock = WorldClock(acceleration=1)
@@ -20,150 +20,168 @@ if "clock" not in st.session_state:
 if "world" not in st.session_state:
     st.session_state.world = build_world(st.session_state.clock)
 
-clock = st.session_state.clock
 world = st.session_state.world
+clock = st.session_state.clock
 
 # ==================================================
-# Sidebar – World Advancement
+# HEADER
 # ==================================================
-st.sidebar.header("World Advancement")
+st.title("🧠 SLEDWorld — Manager & Gatekeeper")
 
-advance_steps = st.sidebar.slider(
-    "Advance frames",
-    min_value=1,
-    max_value=20,
-    value=1,
+st.caption(
+    "World-first intelligence • Patterns → Structure → Meaning • "
+    "All cognition is downstream of reality."
 )
 
-if st.sidebar.button("▶ Advance World"):
-    for _ in range(advance_steps):
-        clock.tick(minutes=1)
-        world.tick()
+# ==================================================
+# WORLD CONTROL (ONLY PLACE THAT TICKS)
+# ==================================================
+st.divider()
+st.subheader("World Control")
 
-st.sidebar.divider()
+colA, colB = st.columns([1, 2])
 
-if st.sidebar.button("Reset World"):
-    st.session_state.pop("world", None)
-    st.session_state.pop("clock", None)
-    st.rerun()
+with colA:
+    steps = st.number_input(
+        "Advance steps",
+        min_value=1,
+        max_value=50,
+        value=1,
+        step=1,
+    )
+
+with colB:
+    if st.button("▶ Advance World"):
+        for _ in range(int(steps)):
+            world.tick()
 
 # ==================================================
-# Main Display
+# GLOBAL STATUS
 # ==================================================
-st.title("SLEDWorld – Reality Frame")
+st.divider()
+st.subheader("Global World Status")
 
-# --------------------------
-# World State
-# --------------------------
-st.subheader("World State")
+status_cols = st.columns(4)
 
-st.json({
-    "frame": world.frame,
+status_cols[0].metric("Frame", world.frame)
+status_cols[1].metric("Places", len(world.places))
+status_cols[2].metric("Agents", len(world.agents))
+status_cols[3].metric(
+    "Ledger Events",
+    len(world.ledger.events) if hasattr(world, "ledger") else 0,
+)
+
+# ==================================================
+# MANAGER SUMMARY (TOP-DOWN)
+# ==================================================
+st.divider()
+st.subheader("Manager Summary")
+
+summary = {
     "places": list(world.places.keys()),
-    "num_places": len(world.places),
-    "num_agents": len(world.agents),
-    "num_scouts": len(world.scouts),
-})
+    "agents": [a.name for a in world.agents],
+    "scouts": len(getattr(world, "scouts", [])),
+    "ledger_events": len(world.ledger.events),
+    "stable_symbols": getattr(world.ledger, "stable_symbols", []),
+}
 
-# --------------------------
-# World Geometry & Objects
-# --------------------------
-st.subheader("World Geometry & Objects")
+st.json(summary)
 
-for place in world.places.values():
-    with st.expander(f"Place: {place.name}", expanded=False):
-        st.json({
-            "position": getattr(place, "position", None),
-            "bounds": getattr(place, "bounds", None),
-        })
+# ==================================================
+# SANDY’S LAW GATING (DECISION LOGIC)
+# ==================================================
+st.divider()
+st.subheader("Sandy’s Law — Gating & Validation")
 
-        if hasattr(place, "rooms"):
-            for room in place.rooms.values():
-                with st.expander(f"Room: {room.name}", expanded=False):
-                    st.json(room.snapshot())
+gate_cols = st.columns(3)
 
-# --------------------------
-# Agents (Walker / Observer)
-# --------------------------
-st.subheader("World Agents")
+with gate_cols[0]:
+    st.metric(
+        "Pattern Stability",
+        world.ledger.pattern_stability_score(),
+    )
+
+with gate_cols[1]:
+    st.metric(
+        "Structural Confidence",
+        world.ledger.structure_confidence_score(),
+    )
+
+with gate_cols[2]:
+    st.metric(
+        "Semantic Readiness",
+        world.ledger.semantic_readiness_score(),
+    )
+
+st.caption(
+    "Gates open only when repeated, cross-modal evidence converges.\n"
+    "No single bot can promote meaning."
+)
+
+# ==================================================
+# ACTIVE BOT OVERVIEW
+# ==================================================
+st.divider()
+st.subheader("Active Bots")
 
 for agent in world.agents:
-    if hasattr(agent, "snapshot"):
-        st.json(agent.snapshot())
+    with st.expander(f"🤖 {agent.name}", expanded=False):
+        if hasattr(agent, "snapshot"):
+            st.json(agent.snapshot())
+        else:
+            st.write("No snapshot available.")
 
-# --------------------------
-# Scouts (Sound / Light)
-# --------------------------
-st.subheader("Scouts")
+# ==================================================
+# SCOUT STATUS
+# ==================================================
+st.divider()
+st.subheader("Scout Activity")
 
-if world.scouts:
-    for scout in world.scouts:
-        snap = scout.snapshot()
-        if snap:
-            st.json(snap)
-else:
+scouts = getattr(world, "scouts", [])
+if not scouts:
     st.write("No active scouts.")
-
-# --------------------------
-# Surveyor (Geometry)
-# --------------------------
-st.subheader("Surveyor")
-
-if world.surveyor:
-    st.json(world.surveyor.snapshot())
 else:
-    st.write("No surveyor present.")
-
-# --------------------------
-# Ledger (Sandy’s Law Gate)
-# --------------------------
-st.subheader("Ledger (Accounting Layer)")
-
-ledger = world.ledger
-
-st.metric("Frames Recorded", ledger.frame_counter)
-st.metric("Total Events", len(ledger.events))
-
-with st.expander("Recent Ledger Events", expanded=False):
-    st.json(ledger.events[-15:])
-
-# --------------------------
-# Architect
-# --------------------------
-st.subheader("Architect (Pattern Recognition)")
-st.json(world.architect.snapshot())
-
-# --------------------------
-# Builder
-# --------------------------
-st.subheader("Builder (Structure Confirmation)")
-st.json(world.builder.snapshot())
-
-# --------------------------
-# Language
-# --------------------------
-st.subheader("Language (Symbol Binding)")
-st.json(world.language.snapshot())
-
-# --------------------------
-# Weather (Placeholder – correct for now)
-# --------------------------
-st.subheader("World Conditions")
-
-st.json({
-    "weather": "clear",
-    "light_cycle": "static",
-    "wind": "none",
-    "note": "World conditions not yet active (pre-A7DO)",
-})
+    for scout in scouts:
+        with st.expander(f"🔍 {scout.name}", expanded=False):
+            st.json(scout.snapshot())
 
 # ==================================================
-# Footer
+# LEDGER — RECENT TRANSACTIONS
 # ==================================================
+st.divider()
+st.subheader("Ledger — Recent Events")
+
+ledger_events = world.ledger.events[-20:]
+
+if not ledger_events:
+    st.write("Ledger empty.")
+else:
+    for event in ledger_events[::-1]:
+        with st.expander(
+            f"Frame {event['frame']} · {event['source']}",
+            expanded=False,
+        ):
+            st.json(event)
+
+# ==================================================
+# MANAGER APPROVALS
+# ==================================================
+st.divider()
+st.subheader("Manager Approvals")
+
+approvals = world.ledger.pending_approvals()
+
+if not approvals:
+    st.success("No pending approvals.")
+else:
+    for approval in approvals:
+        st.warning(f"Pending: {approval}")
+
+# ==================================================
+# FOOTER
+# ==================================================
+st.divider()
 st.caption(
-    "Reality exists first. "
-    "Perception follows. "
-    "Structure emerges. "
-    "Language is grounded. "
-    "A7DO not yet born."
+    "This page does not perceive. It does not learn. It governs.\n"
+    "Reality → Observation → Ledger → Gates → Meaning."
 )
