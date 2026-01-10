@@ -1,42 +1,42 @@
 # world_core/language_bot.py
 
-from __future__ import annotations
-from dataclasses import dataclass, field
-from typing import Dict, Any
-
-@dataclass
 class LanguageBot:
     """
-    Grounded lexicon only.
-    No grammar.
-    No free language.
-    Words bind only after symbol exists.
+    Symbol compiler.
+    Reads stable patterns from ledger and assigns tokens (TV, ON, OFF, BRICK, WALL).
+    Stage-0: token assignment from persistence + deltas.
     """
-    lexicon: Dict[str, str] = field(default_factory=dict)
 
-    def bind_from_symbols(self, symbols: Dict[str, Dict[str, Any]]):
-        # Minimal grounded bindings
-        if "TV" in symbols:
-            self.lexicon.setdefault("TV", "tv")
-        if "WALL" in symbols:
-            self.lexicon.setdefault("WALL", "wall")
-        if "ROOM" in symbols:
-            self.lexicon.setdefault("ROOM", "room")
-        if "ON" in symbols:
-            self.lexicon.setdefault("ON", "on")
-        if "OFF" in symbols:
-            self.lexicon.setdefault("OFF", "off")
-        if "COLOR_RED" in symbols:
-            self.lexicon.setdefault("COLOR_RED", "red")
-        if "COLOR_GREEN" in symbols:
-            self.lexicon.setdefault("COLOR_GREEN", "green")
-        if "SOUND_FIELD" in symbols:
-            self.lexicon.setdefault("SOUND_FIELD", "sound")
-        if "LIGHT_FIELD" in symbols:
-            self.lexicon.setdefault("LIGHT_FIELD", "light")
+    def __init__(self, name="Language-1"):
+        self.name = name
+        self.last_snapshot = {"source": "language", "name": self.name, "tokens": []}
 
-    def snapshot(self) -> Dict[str, Any]:
-        return {
-            "lexicon": self.lexicon,
-            "num_words": len(self.lexicon),
+    def observe(self, world):
+        ledger = getattr(world, "salience_investigator", None)
+        entries = getattr(ledger, "ledger", []) if ledger else []
+
+        # Look for repeated TV signal changes (sound/light)
+        tv_events = [e for e in entries if isinstance(e, dict) and e.get("target") == "tv"]
+        sound = [e for e in tv_events if e.get("focus") == "sound"]
+        light = [e for e in tv_events if e.get("focus") == "light"]
+
+        tokens = []
+        if len(sound) > 5:
+            tokens.append({"token": "TV_SOUND_SIGNATURE", "confidence": 0.6})
+        if len(light) > 5:
+            tokens.append({"token": "TV_LIGHT_SIGNATURE", "confidence": 0.6})
+
+        # ON/OFF emerges from alternating delta
+        # (very simple heuristic for now)
+        if any(e.get("delta") == 1 for e in sound) and any(e.get("delta") == 0 for e in sound):
+            tokens.append({"token": "ON_OFF_STATE", "confidence": 0.5})
+
+        self.last_snapshot = {
+            "source": "language",
+            "name": self.name,
+            "frame": getattr(world, "frame", None),
+            "tokens": tokens
         }
+
+    def snapshot(self):
+        return self.last_snapshot
