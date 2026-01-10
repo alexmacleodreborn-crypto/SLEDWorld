@@ -3,13 +3,11 @@
 """
 SandySquare — coherence gating physics
 
-Implements the minimal Trap → Transition → Escape logic
-used by the Ledger and Manager.
-
-This file MUST remain stable.
+Implements the minimal Trap → Transition → Escape logic.
+Forward-compatible with evolving metrics.
 """
 
-from typing import Dict
+from typing import Dict, Any
 
 
 def coherence_gate(
@@ -17,24 +15,28 @@ def coherence_gate(
     z: float,
     persistence: float,
     threshold: float = 0.55,
+    **kwargs: Any,          # ← absorbs size, area, volume, etc
 ) -> Dict[str, float]:
     """
     SandySquare gate.
 
-    Inputs:
+    Required inputs:
     - sigma: entropy / variability (0–1)
     - z: inhibition / structure (0–1)
     - persistence: stability over frames (0–1)
 
-    Output:
-    - coherence: final stability score
-    - approved: boolean gate result
+    Optional (ignored unless later used):
+    - size
+    - area
+    - volume
+    - count
+    - anything else future bots attach
     """
 
     # Divergence = entropy restrained by structure
     divergence = sigma * (1.0 - z)
 
-    # Coherence grows with persistence and restraint
+    # Coherence grows with persistence
     coherence = max(
         0.0,
         min(
