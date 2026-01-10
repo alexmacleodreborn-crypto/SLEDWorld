@@ -1,37 +1,67 @@
 # world_core/builder_bot.py
 
+from typing import Dict, Any, List
+
+
 class BuilderBot:
     """
-    Takes Architect structures and tries to assemble higher-level forms (wall->room).
-    Stage-0: rule-based inference only.
+    Converts blueprints into constructive procedures.
+
+    - Learns sequences
+    - Learns counts
+    - Learns adjacency
     """
 
-    def __init__(self, name="Builder-1"):
-        self.name = name
-        self.last_snapshot = {"source": "builder", "name": self.name, "inferences": []}
+    def __init__(self):
+        self.procedures: List[Dict[str, Any]] = []
+        self.frame_counter = 0
 
-    def observe(self, world):
-        # If Architect exists, read it
-        architect = None
-        for a in getattr(world, "agents", []):
-            if a.__class__.__name__ == "ArchitectBot":
-                architect = a
-                break
+    # -------------------------------------------------
+    # Ingest blueprints
+    # -------------------------------------------------
 
-        structs = architect.snapshot().get("structures", []) if architect else []
+    def ingest(self, blueprint: Dict[str, Any]):
+        self.frame_counter += 1
 
-        inferences = []
-        # Simple rule: if wall confidence high -> room candidate
-        for s in structs:
-            if s.get("label") == "candidate_wall" and s.get("confidence", 0) >= 0.6:
-                inferences.append({"label": "candidate_room", "confidence": 0.5})
+        if blueprint.get("type") != "blueprint":
+            return
 
-        self.last_snapshot = {
-            "source": "builder",
-            "name": self.name,
-            "frame": getattr(world, "frame", None),
-            "inferences": inferences
+        procedure = self._derive_procedure(blueprint)
+        self.procedures.append(procedure)
+
+    # -------------------------------------------------
+    # Procedure derivation
+    # -------------------------------------------------
+
+    def _derive_procedure(self, blueprint: Dict[str, Any]) -> Dict[str, Any]:
+        steps = []
+
+        for component in blueprint["components"]:
+            element = component["element"]
+            count = component["count"]
+
+            steps.append({
+                "action": "repeat_place",
+                "element": element,
+                "count": count,
+            })
+
+        return {
+            "type": "construction_procedure",
+            "structure": blueprint["structure"],
+            "id": blueprint["id"],
+            "steps": steps,
+            "constraints": blueprint["constraints"],
+            "frame": self.frame_counter,
         }
 
-    def snapshot(self):
-        return self.last_snapshot
+    # -------------------------------------------------
+    # Snapshot
+    # -------------------------------------------------
+
+    def snapshot(self) -> Dict[str, Any]:
+        return {
+            "source": "builder",
+            "frames": self.frame_counter,
+            "procedures": self.procedures[-5:],
+        }
