@@ -1,46 +1,41 @@
-# world_core/world_space.py
-
 from dataclasses import dataclass
 
-@dataclass
-class WorldWeather:
-    # simple toggles; no “time”, only state + frame
-    sun_level: float = 0.6      # 0..1
-    rain: bool = False
-    snow: bool = False
-    wind: float = 0.2           # 0..1
-    cloud: float = 0.2          # 0..1
+WEATHER_DEFAULTS = {
+    "daylight": 0.6,     # 0..1
+    "wind": 0.2,         # 0..1
+    "rain": 0.0,         # 0..1
+    "snow": 0.0,         # 0..1
+    "temperature": 0.55  # normalized 0..1
+}
 
+@dataclass
 class WorldSpace:
     """
-    Global environment. Frame-based. No cognitive meaning.
+    Global “sky” / weather fields.
+    No agents need to understand time; it’s just a state changing with frame.
     """
-    def __init__(self):
-        self.frame_counter = 0
-        self.weather = WorldWeather()
+    frame_counter: int = 0
+
+    daylight: float = WEATHER_DEFAULTS["daylight"]
+    wind: float = WEATHER_DEFAULTS["wind"]
+    rain: float = WEATHER_DEFAULTS["rain"]
+    snow: float = WEATHER_DEFAULTS["snow"]
+    temperature: float = WEATHER_DEFAULTS["temperature"]
 
     def tick(self, frame: int):
         self.frame_counter = int(frame)
-
-        # simple cyclic-ish variation without time meaning
-        # (just a deterministic state evolution)
-        f = self.frame_counter
-        self.weather.sun_level = 0.3 + 0.3 * ((f % 100) / 100.0)  # 0.3..0.6
-        self.weather.cloud = 0.1 + 0.5 * (((f * 7) % 100) / 100.0)
-        self.weather.wind = 0.1 + 0.6 * (((f * 13) % 100) / 100.0)
-
-        # occasional toggles (rare)
-        self.weather.rain = ((f % 240) > 200)
-        self.weather.snow = ((f % 500) > 470)
+        # simple day oscillation (no “time awareness” required by agents)
+        # daylight cycles very slowly with frame
+        phase = (frame % 2000) / 2000.0
+        self.daylight = 0.2 + 0.8 * (1.0 - abs(phase*2 - 1.0))  # triangle wave
+        # keep other fields stable for now (you can expand later)
 
     def snapshot(self):
         return {
-            "frame_counter": self.frame_counter,
-            "weather": {
-                "sun_level": round(self.weather.sun_level, 3),
-                "cloud": round(self.weather.cloud, 3),
-                "wind": round(self.weather.wind, 3),
-                "rain": self.weather.rain,
-                "snow": self.weather.snow,
-            }
+            "frame": self.frame_counter,
+            "daylight": round(self.daylight, 3),
+            "wind": round(self.wind, 3),
+            "rain": round(self.rain, 3),
+            "snow": round(self.snow, 3),
+            "temperature": round(self.temperature, 3),
         }
