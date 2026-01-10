@@ -1,101 +1,97 @@
-# world_core/scout.py
-
-import math
-
+# world_core/scout_bot.py
 
 class ScoutBot:
     """
-    Local square-grid scout:
-    - samples occupancy (shape), sound grid, light grid in a square around center_xyz
-    - outputs grids into snapshot for Streamlit rendering
+    Modality-specific scout.
+
+    Modes:
+    - "sound" : listens for sound field changes
+    - "light" : listens for light field changes
+    - "shape" : listens for object presence (optional later)
+
+    Scouts do NOT think.
+    Scouts only report deltas to the ledger.
     """
 
-    def __init__(self, name, center_xyz, extent_m=18.0, resolution_m=2.0, max_frames=200):
+    def __init__(
+        self,
+        name: str,
+        mode: str = "sound",
+        max_frames: int = 200,
+    ):
         self.name = name
-        self.center_xyz = tuple(center_xyz)
-        self.extent_m = float(extent_m)
-        self.resolution_m = float(resolution_m)
-        self.max_frames = int(max_frames)
+        self.mode = mode
+        self.max_frames = max_frames
 
         self.frames = 0
         self.active = True
-        self.last = {}
 
-    def _sample_room_signatures(self, world, x, y, z):
-        """
-        Return (occupancy, sound, light) sampled at this point.
-        """
-        occ = 0.0
-        sound = 0.0
-        light = 0.0
+        self.last_snapshot = {}
+        self.last_value = None
 
-        for place in world.places.values():
-            # occupancy if inside any place bounds
-            if hasattr(place, "contains_world_point") and place.contains_world_point((x, y, z)):
-                occ = 1.0
-
-            if hasattr(place, "rooms"):
-                for room in place.rooms.values():
-                    if room.contains_world_point((x, y, z)):
-                        occ = 1.0
-                        sound = max(sound, getattr(room, "get_sound_level", lambda: 0.0)())
-                        light = max(light, getattr(room, "get_light_level", lambda: 0.0)())
-
-                        # enrich by TV local field: if close to TV, raise the grid
-                        tv = room.objects.get("tv") if hasattr(room, "objects") else None
-                        if tv:
-                            d = math.dist((x, y, z), tv.position)
-                            if d < 12:
-                                sound = max(sound, tv.sound.level() * (1.0 - d / 12.0))
-                                light = max(light, tv.light.level() * (1.0 - d / 12.0))
-
-        return occ, round(sound, 3), round(light, 3)
+    # -------------------------------------------------
+    # Observe world
+    # -------------------------------------------------
 
     def observe(self, world):
         if not self.active:
             return
+
         self.frames += 1
         if self.frames > self.max_frames:
             self.active = False
             return
 
-        cx, cy, cz = self.center_xyz
-        r = self.extent_m
-        step = self.resolution_m
+        value = None
 
-        n = int((2 * r) / step)
-        if n <= 0:
-            n = 1
+        # -------------------------
+        # SOUND MODE
+        # -------------------------
+        if self.mode == "sound":
+            total = 0.0
+            for place in world.places.values():
+                if hasattr(place, "rooms"):
+                    for room in place.rooms.values():
+                        if hasattr(room, "get_sound_level"):
+                            total += room.get_sound_level()
+            value = round(total, 3)
 
-        occupancy = [[0.0 for _ in range(n)] for __ in range(n)]
-        sound_grid = [[0.0 for _ in range(n)] for __ in range(n)]
-        light_grid = [[0.0 for _ in range(n)] for __ in range(n)]
+        # -------------------------
+        # LIGHT MODE
+        # -------------------------
+        elif self.mode == "light":
+            total = 0.0
+            for place in world.places.values():
+                if hasattr(place, "rooms"):
+                    for room in place.rooms.values():
+                        for obj in getattr(room, "objects", {}).values():
+                            if hasattr(obj, "light"):
+                                total += obj.light.level()
+            value = round(total, 3)
 
-        for iy in range(n):
-            y = cy - r + iy * step
-            for ix in range(n):
-                x = cx - r + ix * step
-                occ, snd, lgt = self._sample_room_signatures(world, x, y, cz)
-                occupancy[iy][ix] = occ
-                sound_grid[iy][ix] = snd
-                light_grid[iy][ix] = lgt
+        # -------------------------
+        # SHAPE MODE (reserved)
+        # -------------------------
+        elif self.mode == "shape":
+            value = len(world.places)
 
-        self.last = {
-            "source": "scout",
-            "name": self.name,
-            "frame": world.space.frame_counter,
-            "active": self.active,
-            "grid_size": n,
-            "resolution": step,
-            "occupancy": occupancy,
-            "sound_grid": sound_grid,
-            "light_grid": light_grid,
-        }
+        # -------------------------
+        # Only report changes
+        # -------------------------
+        if value != self.last_value:
+            self.last_value = value
+            self.last_snapshot = {
+                "source": "scout",
+                "name": self.name,
+                "mode": self.mode,
+                "value": value,
+                "frame": world.frame,
+                "active": self.active,
+            }
+
+    # -------------------------------------------------
+    # Snapshot
+    # -------------------------------------------------
 
     def snapshot(self):
-        return self.last or {
-            "source": "scout",
-            "name": self.name,
-            "frame": self.frames,
-            "active": self.active,
-        }
+        return self.last_snapshot if self.last_snapshot else None
