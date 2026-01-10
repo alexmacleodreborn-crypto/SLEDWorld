@@ -1,22 +1,17 @@
-# world_core/profiles/room_profile.py
-
-from __future__ import annotations
 import random
 from world_core.world_object import WorldObject
 from world_core.profiles.tv_profile import TVProfile
 from world_core.profiles.remote_profile import RemoteProfile
 
+
 class RoomProfile(WorldObject):
-    """
-    Room is a bounded volume with objects.
-    No cognition.
-    """
-    def __init__(self, name, position, size, floor: int, room_type: str):
+    def __init__(self, name, position, size, floor, room_type):
         super().__init__(name=name, position=position)
 
         width, depth, height = size
         x, y, z = position
-        self.set_bounds((x, y, z), (x + width, y + depth, z + height))
+
+        self.set_bounds(min_xyz=(x, y, z), max_xyz=(x + width, y + depth, z + height))
 
         self.size = {"width": float(width), "depth": float(depth), "height": float(height)}
         self.floor = int(floor)
@@ -30,15 +25,15 @@ class RoomProfile(WorldObject):
         if self.room_type == "living_room":
             (min_x, min_y, min_z), (max_x, max_y, _) = self.bounds
 
-            # TV wall-mounted centre (north wall i.e. min_y)
+            # wall-mounted center TV
             tv_x = (min_x + max_x) / 2.0
-            tv_y = min_y + 0.2
-            tv_z = min_z + 1.4
+            tv_y = min_y + 0.5
+            tv_z = min_z + 1.5
 
             tv = TVProfile(name=f"{self.name}:tv", position=(tv_x, tv_y, tv_z))
             remote = RemoteProfile(
                 name=f"{self.name}:remote",
-                position=(tv_x - 0.8, tv_y + 1.0, min_z + 0.8),
+                position=(tv_x - 1.0, tv_y + 1.0, min_z + 0.8),
                 tv=tv,
             )
             self.objects["tv"] = tv
@@ -66,14 +61,6 @@ class RoomProfile(WorldObject):
                 total += obj.light_level()
         return round(min(total, 1.0), 3)
 
-    def interact(self, object_name: str, action: str):
-        obj = self.objects.get(object_name)
-        if obj is None:
-            return False
-        if hasattr(obj, action):
-            return getattr(obj, action)()
-        return False
-
     def snapshot(self):
         base = super().snapshot()
         base.update({
@@ -84,9 +71,6 @@ class RoomProfile(WorldObject):
             "size": self.size,
             "sound_level": self.get_sound_level(),
             "light_level": self.get_light_level(),
-            "objects": {
-                name: (obj.snapshot() if hasattr(obj, "snapshot") else str(obj))
-                for name, obj in self.objects.items()
-            }
+            "objects": {k: v.snapshot() for k, v in self.objects.items()},
         })
         return base
