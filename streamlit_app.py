@@ -56,7 +56,7 @@ with colC:
 # ==================================================
 st.subheader("World State")
 st.json({
-    "frame": world.space.frame_counter,
+    "frame": world.frame,
     "weather": world.space.snapshot(),
     "places": list(world.places.keys()),
     "num_places": len(world.places),
