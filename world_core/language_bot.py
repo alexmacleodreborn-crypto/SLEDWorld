@@ -1,43 +1,52 @@
 # world_core/language_bot.py
 
-from typing import Dict, Any, List
-
 class LanguageBot:
     """
-    Symbols first. Words later.
-    Produces "symbol" events, not final truth.
+    Symbol → word promotion layer.
+
+    Activated only after sufficient pattern stability.
     """
-    def __init__(self, name="Language-1"):
-        self.name = name
-        self.symbols_proposed: List[Dict[str, Any]] = []
-        self.symbols_accepted: List[str] = []
 
-    def ingest_proposals(self, proposals: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        out = []
+    def __init__(self):
+        self.vocabulary = {}
+        self.events = []
+
+    # =================================================
+    # Ingest Concierge proposals
+    # =================================================
+
+    def ingest_proposals(self, proposals):
+        if not proposals:
+            return []
+
+        new_events = []
+
         for p in proposals:
-            sym = p.get("symbol_candidate")
-            if not sym:
-                continue
-            if sym in self.symbols_accepted:
-                continue
-            self.symbols_proposed.append(p)
-            out.append({
-                "source": "language",
-                "entity": sym,
-                "symbol": sym,
-                "confidence": float(p.get("confidence", 0.5)),
-                "reason": p.get("reason",""),
-            })
-        return out
+            signals = p.get("signals", {})
+            objects = p.get("objects", [])
 
-    def accept(self, symbol: str):
-        if symbol not in self.symbols_accepted:
-            self.symbols_accepted.append(symbol)
+            # Example: first grounded word
+            if signals.get("light") and signals.get("sound") and "tv" in "".join(objects).lower():
+                if "TV" not in self.vocabulary:
+                    self.vocabulary["TV"] = {
+                        "type": "object",
+                        "grounded_in": "light+sound+shape",
+                    }
+                    ev = {
+                        "word": "TV",
+                        "reason": "repeated light+sound+shape correlation",
+                    }
+                    new_events.append(ev)
+                    self.events.append(ev)
 
-    def snapshot(self) -> Dict[str, Any]:
+        return new_events
+
+    # =================================================
+    # Snapshot
+    # =================================================
+
+    def snapshot(self):
         return {
-            "source":"language",
-            "name": self.name,
-            "symbols_accepted": self.symbols_accepted,
-            "symbols_proposed_tail": self.symbols_proposed[-20:],
+            "vocabulary": self.vocabulary,
+            "events": self.events[-10:],
         }
