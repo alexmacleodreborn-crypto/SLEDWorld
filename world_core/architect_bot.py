@@ -1,42 +1,31 @@
 # world_core/architect_bot.py
 
-from __future__ import annotations
-from typing import Dict, Any, List
-
 class ArchitectBot:
     """
-    Reads the ledger/symbols only.
-    Proposes higher-level structure based on available evidence.
-    Never confirms.
+    Reads schematics/ledger and groups repeating surface motifs into structures.
+    Stage-0: heuristic pattern grouping only.
     """
-    def propose(self, ledger) -> List[Dict[str, Any]]:
-        proposals: List[Dict[str, Any]] = []
 
-        symbols = getattr(ledger, "symbols", {}) or {}
+    def __init__(self, name="Architect-1"):
+        self.name = name
+        self.last_snapshot = {"source": "architect", "name": self.name, "structures": []}
 
-        # Minimal stage-1 proposals:
-        # If we have aerial map, propose WALL_CANDIDATE and ROOM_CANDIDATE
-        if "AERIAL_MAP" in symbols and symbols["AERIAL_MAP"].get("confidence", 0) >= 0.7:
-            proposals.append({
-                "source": "architect",
-                "proposal": "WALL",
-                "reason": "aerial_map_present",
-                "confidence": 0.6
-            })
-            proposals.append({
-                "source": "architect",
-                "proposal": "ROOM",
-                "reason": "enclosure_possible_from_aerial",
-                "confidence": 0.55
-            })
+    def observe(self, world):
+        ledger = getattr(world, "salience_investigator", None)
+        entries = getattr(ledger, "ledger", []) if ledger else []
 
-        # If TV and ONOFF exist, propose OBJECT_STATEFUL
-        if "TV" in symbols and "ONOFF" in symbols:
-            proposals.append({
-                "source": "architect",
-                "proposal": "STATEFUL_OBJECT",
-                "reason": "tv_onoff_detected",
-                "confidence": 0.7
-            })
+        # Placeholder: detect repeated 'surveyor' or 'shape' mentions
+        shape_events = [e for e in entries if isinstance(e, dict) and (e.get("focus") == "shape" or e.get("source") == "surveyor")]
 
-        return proposals
+        self.last_snapshot = {
+            "source": "architect",
+            "name": self.name,
+            "frame": getattr(world, "frame", None),
+            "shape_events_seen": len(shape_events),
+            "structures": [
+                {"label": "candidate_wall", "confidence": 0.3 + min(len(shape_events) / 1000.0, 0.6)}
+            ] if shape_events else []
+        }
+
+    def snapshot(self):
+        return self.last_snapshot
