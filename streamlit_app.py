@@ -1,21 +1,14 @@
 # streamlit_app.py
 
 import streamlit as st
-
 from world_core.bootstrap import build_world
 from world_core.world_clock import WorldClock
 
-# ==================================================
-# Streamlit config
-# ==================================================
-st.set_page_config(
-    page_title="SLEDWorld – Reality Frame",
-    layout="wide"
-)
+st.set_page_config(page_title="SLEDWorld – Layered Reality", layout="wide")
 
-# ==================================================
-# Session initialisation
-# ==================================================
+# -------------------------
+# Session init
+# -------------------------
 if "clock" not in st.session_state:
     st.session_state.clock = WorldClock(acceleration=1)
 
@@ -25,17 +18,12 @@ if "world" not in st.session_state:
 clock = st.session_state.clock
 world = st.session_state.world
 
-# ==================================================
-# Sidebar – World Advancement
-# ==================================================
+# -------------------------
+# Sidebar controls
+# -------------------------
 st.sidebar.header("World Advancement")
 
-advance_steps = st.sidebar.slider(
-    "Advance steps",
-    min_value=1,
-    max_value=20,
-    value=1,
-)
+advance_steps = st.sidebar.slider("Advance steps", 1, 50, 5)
 
 if st.sidebar.button("▶ Advance World"):
     for _ in range(advance_steps):
@@ -44,92 +32,25 @@ if st.sidebar.button("▶ Advance World"):
 
 st.sidebar.divider()
 
-if st.sidebar.button("Reset World"):
+if st.sidebar.button("Reset World (hard)"):
     st.session_state.pop("world", None)
     st.session_state.pop("clock", None)
     st.rerun()
 
-# ==================================================
-# Main Display
-# ==================================================
-st.title("SLEDWorld – Reality Frame")
+# -------------------------
+# Home
+# -------------------------
+st.title("SLEDWorld — Layered Reality")
+st.caption("World-first → perception → salience → ledger → symbols → language")
 
-# --------------------------
-# World Summary
-# --------------------------
-st.subheader("World State")
-
+st.subheader("Current World Summary")
 st.json({
-    "frame": world.frame,
-    "num_places": len(world.places),
-    "num_agents": len(world.agents),
+    "frame": getattr(world, "frame", None),
+    "num_places": len(getattr(world, "places", {})),
+    "num_agents": len(getattr(world, "agents", [])),
     "num_scouts": len(getattr(world, "scouts", [])),
+    "ledger_entries": len(getattr(getattr(world, "salience_investigator", None), "ledger", []))
+                     if getattr(world, "salience_investigator", None) else 0,
 })
 
-# --------------------------
-# Geometry & Places
-# --------------------------
-st.subheader("World Geometry")
-
-for place in world.places.values():
-    with st.expander(f"Place: {place.name}", expanded=False):
-        st.json(place.snapshot())
-
-# --------------------------
-# Observer View
-# --------------------------
-st.subheader("Observer Perception")
-
-observer_found = False
-for agent in world.agents:
-    if agent.__class__.__name__ == "ObserverBot":
-        observer_found = True
-        st.json(agent.snapshot())
-
-if not observer_found:
-    st.warning("No observer present.")
-
-# --------------------------
-# All Agents
-# --------------------------
-st.subheader("World Agents")
-
-for agent in world.agents:
-    if hasattr(agent, "snapshot"):
-        st.json(agent.snapshot())
-
-# --------------------------
-# Scouts
-# --------------------------
-st.subheader("Active Scouts")
-
-if world.scouts:
-    for scout in world.scouts:
-        st.json(scout.snapshot())
-else:
-    st.write("No active scouts.")
-
-# --------------------------
-# Salience Ledger
-# --------------------------
-st.subheader("Salience Ledger")
-
-ledger = world.salience_investigator
-
-st.metric("Ledger Entries", len(ledger.ledger))
-
-st.json(ledger.snapshot())
-
-st.subheader("Recent Transactions")
-st.json(ledger.ledger[-10:])
-
-# ==================================================
-# Footer
-# ==================================================
-st.caption(
-    "Reality exists first. "
-    "Motion causes change. "
-    "Perception detects. "
-    "Salience stabilises. "
-    "Meaning emerges."
-)
+st.info("Use the left sidebar to advance. Use the Pages menu to inspect each layer.")
