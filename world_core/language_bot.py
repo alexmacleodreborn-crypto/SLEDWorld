@@ -1,52 +1,33 @@
-# world_core/language_bot.py
-
 class LanguageBot:
     """
-    Symbol → word promotion layer.
-
-    Activated only after sufficient pattern stability.
+    Turns proposals into early symbol tokens.
+    Dormant unless called.
     """
-
     def __init__(self):
-        self.vocabulary = {}
-        self.events = []
-
-    # =================================================
-    # Ingest Concierge proposals
-    # =================================================
+        self.accepted_symbols = []
+        self._emitted = []
 
     def ingest_proposals(self, proposals):
-        if not proposals:
-            return []
-
-        new_events = []
-
+        self._emitted = []
         for p in proposals:
-            signals = p.get("signals", {})
-            objects = p.get("objects", [])
+            cand = p.get("symbol_candidate")
+            if not cand:
+                continue
 
-            # Example: first grounded word
-            if signals.get("light") and signals.get("sound") and "tv" in "".join(objects).lower():
-                if "TV" not in self.vocabulary:
-                    self.vocabulary["TV"] = {
-                        "type": "object",
-                        "grounded_in": "light+sound+shape",
-                    }
-                    ev = {
-                        "word": "TV",
-                        "reason": "repeated light+sound+shape correlation",
-                    }
-                    new_events.append(ev)
-                    self.events.append(ev)
+            # emit a pre-word token (symbol only)
+            self._emitted.append({
+                "source": "language",
+                "event": "symbol_emitted",
+                "symbol": cand,
+            })
 
-        return new_events
+        return self._emitted
 
-    # =================================================
-    # Snapshot
-    # =================================================
+    def accept(self, symbol):
+        self.accepted_symbols.append(symbol)
 
     def snapshot(self):
         return {
-            "vocabulary": self.vocabulary,
-            "events": self.events[-10:],
+            "source": "language",
+            "accepted_symbols": self.accepted_symbols[-10:]
         }
