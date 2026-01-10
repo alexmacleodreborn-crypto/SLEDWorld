@@ -1,63 +1,56 @@
-# world_core/observer_bot.py
-
 class ObserverBot:
     """
-    Passive perceptual observer.
-
-    Rules:
-    - No physics
-    - No interaction
-    - No cognition
-    - Reports only what EXISTS
-    - WorldState IS the space
+    Passive cognitive sensor:
+    - sees objects and their light signatures
+    - hears sound in rooms
     """
-
-    def __init__(self, name: str):
+    def __init__(self, name="Observer"):
         self.name = name
-        self.last_snapshot = {}
-
-    # =================================================
-    # PERCEPTION
-    # =================================================
+        self.frames = 0
+        self.last = {}
 
     def observe(self, world):
-        """
-        Capture a complete perceptual snapshot of the world.
-        """
+        self.frames += 1
 
-        self.last_snapshot = {
+        # Find "Family House" and its living room
+        house = world.places.get("Family House")
+        seen = {"places": list(world.places.keys())}
+        heard = {"sound_level": 0.0}
+        light = {"light_level": 0.0}
+
+        tv_is_on = None
+        tv_light_color = None
+
+        if house and hasattr(house, "rooms"):
+            for room in house.rooms.values():
+                # collect room signatures
+                if hasattr(room, "get_sound_level"):
+                    heard["sound_level"] = max(heard["sound_level"], room.get_sound_level())
+                if hasattr(room, "get_light_level"):
+                    light["light_level"] = max(light["light_level"], room.get_light_level())
+
+                # TV state
+                tv = room.objects.get("tv") if hasattr(room, "objects") else None
+                if tv:
+                    tv_is_on = tv.is_on
+                    tv_light_color = tv.light.color
+
+        self.last = {
             "source": "observer",
             "name": self.name,
-            "frame": world.frame,
-
-            # --------------------------
-            # WORLD GEOMETRY
-            # --------------------------
-            "places": {
-                place_name: place.snapshot()
-                for place_name, place in world.places.items()
+            "frame": world.space.frame_counter,
+            "world_space": world.space.snapshot(),
+            "seen": light,
+            "heard": heard,
+            "seen_objects": {
+                "tv_is_on": tv_is_on,
+                "tv_light_color": tv_light_color,
             },
-
-            # --------------------------
-            # AGENTS (PHYSICAL ONLY)
-            # --------------------------
-            "agents": [
-                agent.snapshot()
-                for agent in world.agents
-                if hasattr(agent, "snapshot")
-            ],
         }
 
-    # =================================================
-    # SNAPSHOT ACCESS
-    # =================================================
-
     def snapshot(self):
-        """
-        Return last known perceptual state.
-        """
-        return self.last_snapshot or {
+        return self.last or {
             "source": "observer",
             "name": self.name,
-            "frame": None,
+            "frame": self.frames
         }
