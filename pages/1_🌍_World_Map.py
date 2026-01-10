@@ -1,9 +1,16 @@
-# pages/1_🌍_World_Map.py
+import streamlit as st
 
-st.title("World Map")
+st.set_page_config(layout="wide")
+st.title("World Map — Aerial Overview")
 
-st.write(f"Frame: {world.frame}")
+world = st.session_state.get("world")
+if not world:
+    st.warning("Advance the world from the Manager page.")
+    st.stop()
 
-for place in world.places.values():
+st.subheader("Places")
+for name, place in world.places.items():
     st.json(place.snapshot())
-st.caption("This is the world-first aerial reference. Everything else is downstream.")
+
+st.subheader("World Space / Weather")
+st.json(world.space.snapshot())
