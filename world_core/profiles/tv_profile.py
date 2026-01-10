@@ -1,47 +1,41 @@
-# world_core/profiles/tv_profile.py
-
-from __future__ import annotations
 from world_core.sound.sound_source import SoundSource
 from world_core.light.light_source import LightSource
 
+
 class TVProfile:
     """
-    Stateful emitter.
-    - OFF: red standby light, no sound
-    - ON: green light, sound on
+    Physical object:
+    - sound output when ON
+    - light output always (red standby OFF, green ON)
     """
     def __init__(self, name, position):
         self.name = name
-        self.position = position
+        self.position = tuple(position)
         self.is_on = False
 
-        self.sound = SoundSource(name=f"{name}:sound", position=position, base_level=0.6)
-        self.light = LightSource(name=f"{name}:light", position=position, base_level=0.8)
+        self.sound = SoundSource(name=f"{name}_sound", position=position, base_level=0.6)
+        self.light = LightSource(name=f"{name}_light", position=position, base_level=0.8)
 
-        # start OFF: red
-        self.sound.set_active(False)
+        # standby state
         self.light.set_active(True, color="red")
+        self.sound.set_active(False)
 
     def power_toggle(self):
         self.is_on = not self.is_on
-        if self.is_on:
-            self.sound.set_active(True)
-            self.light.set_active(True, color="green")
-        else:
-            self.sound.set_active(False)
-            self.light.set_active(True, color="red")
+        self.sound.set_active(self.is_on)
+        self.light.set_active(True, color=("green" if self.is_on else "red"))
         return True
 
-    def sound_level(self):
+    def sound_level(self) -> float:
         return self.sound.level()
 
-    def light_level(self):
+    def light_level(self) -> float:
         return self.light.level()
 
     def snapshot(self):
         return {
-            "name": self.name,
             "type": "tv",
+            "name": self.name,
             "position": self.position,
             "is_on": self.is_on,
             "sound_level": self.sound.level(),
