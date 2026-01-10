@@ -1,16 +1,18 @@
 import streamlit as st
+import matplotlib.pyplot as plt
 
-st.set_page_config(layout="wide")
-st.title("World Map — Aerial Overview")
+st.title("World Map")
 
 world = st.session_state.get("world")
 if not world:
-    st.warning("Advance the world from the Manager page.")
+    st.warning("No world in session. Go to main page first.")
     st.stop()
 
-st.subheader("Places")
-for name, place in world.places.items():
-    st.json(place.snapshot())
+occ = world.grid.render_occupancy(size=96)
+fig, ax = plt.subplots()
+ax.imshow(occ, interpolation="nearest")
+ax.axis("off")
+st.pyplot(fig, use_container_width=True)
 
-st.subheader("World Space / Weather")
-st.json(world.space.snapshot())
+st.subheader("Places")
+st.json(list(world.places.keys()))
