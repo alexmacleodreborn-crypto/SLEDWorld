@@ -1,137 +1,34 @@
-# world_core/sandys_square.py
+import numpy as np
 
-"""
-SandySquare — coherence gating physics (FINAL)
-
-Accepts:
-- scalar
-- list / tuple (point clouds)
-- dict (metric packets)
-
-Never crashes.
-Always fails closed.
-"""
-
-from typing import Dict, Any, Optional, Union
-import math
-
-
-# -------------------------------------------------
-# Helpers
-# -------------------------------------------------
-
-def _clamp01(x: float) -> float:
-    return float(max(0.0, min(1.0, x)))
-
-
-def _derive_sigma_from_points(points) -> float:
-    if not points or len(points) <= 1:
-        return 0.05
-
-    # numeric variance
-    if all(isinstance(p, (int, float)) for p in points):
-        mean = sum(points) / len(points)
-        var = sum((p - mean) ** 2 for p in points) / len(points)
-        return _clamp01(math.sqrt(var))
-
-    # symbolic diversity
-    unique = len({str(p) for p in points})
-    return _clamp01(unique / max(1, len(points)))
-
-
-def _derive_scalar(value) -> float:
+def coherence_gate(points_xy, grid_size: int = 32):
     """
-    Collapse any supported structure into a scalar [0,1].
+    SandySquare-lite coherence:
+    - Build occupancy grid from points.
+    - Coherence increases when points cluster and persist.
+    points_xy: list of (x, y) in grid coords [0..grid_size-1]
+    Returns float in [0,1]
     """
-    if value is None:
+    if not points_xy:
         return 0.0
 
-    if isinstance(value, (int, float)):
-        return _clamp01(float(value))
+    g = np.zeros((grid_size, grid_size), dtype=float)
+    for (x, y) in points_xy:
+        if 0 <= x < grid_size and 0 <= y < grid_size:
+            g[int(y), int(x)] += 1.0
 
-    if isinstance(value, (list, tuple)):
-        return _derive_sigma_from_points(value)
+    total = float(g.sum())
+    if total <= 0:
+        return 0.0
 
-    if isinstance(value, dict):
-        # priority keys (common across your system)
-        for k in ("value", "score", "coherence", "stability", "mean"):
-            if k in value and isinstance(value[k], (int, float)):
-                return _clamp01(float(value[k]))
+    # normalized density
+    p = g / total
+    # entropy of distribution (lower entropy => more coherent)
+    eps = 1e-12
+    entropy = -float(np.sum(p * np.log(p + eps)))  # 0..log(N)
+    max_entropy = np.log(grid_size * grid_size)
+    entropy_norm = entropy / max_entropy if max_entropy > 0 else 1.0
 
-        # fallback: entropy from dict size
-        return _clamp01(len(value) / 10.0)
-
-    # unknown type
-    return 0.0
-
-
-# -------------------------------------------------
-# SandySquare gate
-# -------------------------------------------------
-
-def coherence_gate(
-    sigma: Optional[Union[float, list, dict]] = None,
-    z: Optional[Union[float, dict]] = None,
-    persistence: Optional[Union[float, dict]] = None,
-    threshold: float = 0.55,
-    metrics: Optional[Dict[str, Any]] = None,
-    *args: Any,
-    **kwargs: Any,
-) -> Dict[str, Any]:
-    """
-    SandySquare coherence gate.
-
-    FAIL-SAFE:
-    - Accepts rich structures
-    - Collapses to scalars
-    - Never raises TypeError
-    """
-
-    # -------------------------------------------------
-    # 1) Allow positional dict call
-    # -------------------------------------------------
-    if isinstance(sigma, dict) and metrics is None:
-        metrics = sigma
-        sigma = None
-
-    # -------------------------------------------------
-    # 2) Pull from metrics if present
-    # -------------------------------------------------
-    if isinstance(metrics, dict):
-        sigma = metrics.get("sigma", sigma)
-        z = metrics.get("z", z)
-        persistence = metrics.get("persistence", persistence)
-
-    # -------------------------------------------------
-    # 3) Pull from kwargs
-    # -------------------------------------------------
-    sigma = kwargs.get("sigma", sigma)
-    z = kwargs.get("z", z)
-    persistence = kwargs.get("persistence", persistence)
-
-    # -------------------------------------------------
-    # 4) Collapse everything to scalars
-    # -------------------------------------------------
-    sigma_s = _derive_scalar(sigma)
-    z_s = _derive_scalar(z)
-    persistence_s = _derive_scalar(persistence)
-
-    # -------------------------------------------------
-    # 5) SandySquare physics
-    # -------------------------------------------------
-    divergence = sigma_s * (1.0 - z_s)
-
-    coherence = _clamp01(
-        (1.0 - divergence) * (0.5 + 0.5 * persistence_s)
-    )
-
-    approved = coherence >= threshold
-
-    return {
-        "sigma": round(sigma_s, 4),
-        "z": round(z_s, 4),
-        "persistence": round(persistence_s, 4),
-        "divergence": round(divergence, 4),
-        "coherence": round(coherence, 4),
-        "approved": approved,
-    }
+    # coherence is inverse entropy, softened
+    coherence = 1.0 - entropy_norm
+    coherence = float(max(0.0, min(1.0, coherence)))
+    return coherence
