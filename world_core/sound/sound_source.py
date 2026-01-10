@@ -1,7 +1,7 @@
 class SoundSource:
     def __init__(self, name, position, base_level=0.6):
         self.name = name
-        self.position = tuple(position)
+        self.position = position
         self.base_level = float(base_level)
         self.active = False
 
