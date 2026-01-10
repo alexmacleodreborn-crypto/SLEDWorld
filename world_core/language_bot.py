@@ -1,57 +1,43 @@
 # world_core/language_bot.py
 
+from typing import Dict, Any, List
+
 class LanguageBot:
     """
-    Symbol ↔ sound ↔ meaning binder.
-    No grammar. No sentences.
-    Just grounded labels.
+    Symbols first. Words later.
+    Produces "symbol" events, not final truth.
     """
+    def __init__(self, name="Language-1"):
+        self.name = name
+        self.symbols_proposed: List[Dict[str, Any]] = []
+        self.symbols_accepted: List[str] = []
 
-    def __init__(self):
-        self.name = "Language"
-        self.lexicon = {}
-        self.events = []
-
-        self.min_repeats = 8
-
-    def review(self, ledger):
-        sound_hits = {}
-        light_hits = {}
-
-        for e in ledger.events[-400:]:
-            if e.get("source") == "observer":
-                seen = e.get("seen_objects", {})
-                heard = e.get("heard", {})
-
-                if "tv_is_on" in seen:
-                    key = "TV"
-                    sound_hits[key] = sound_hits.get(key, 0) + 1
-
-                light = seen.get("tv_light_color")
-                if light:
-                    light_hits.setdefault(light, 0)
-                    light_hits[light] += 1
-
-        # --- Bind TV ---
-        if sound_hits.get("TV", 0) >= self.min_repeats:
-            self._bind("TV", {
-                "function": "emits_sound_and_light",
-                "light_colors": list(light_hits.keys()),
+    def ingest_proposals(self, proposals: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        out = []
+        for p in proposals:
+            sym = p.get("symbol_candidate")
+            if not sym:
+                continue
+            if sym in self.symbols_accepted:
+                continue
+            self.symbols_proposed.append(p)
+            out.append({
+                "source": "language",
+                "entity": sym,
+                "symbol": sym,
+                "confidence": float(p.get("confidence", 0.5)),
+                "reason": p.get("reason",""),
             })
+        return out
 
-    def _bind(self, word, meaning):
-        if word in self.lexicon:
-            return
-        self.lexicon[word] = meaning
-        self.events.append({
-            "source": "language",
-            "word": word,
-            "meaning": meaning,
-        })
+    def accept(self, symbol: str):
+        if symbol not in self.symbols_accepted:
+            self.symbols_accepted.append(symbol)
 
-    def snapshot(self):
+    def snapshot(self) -> Dict[str, Any]:
         return {
-            "source": "language",
-            "lexicon": self.lexicon,
-            "events": self.events[-10:],
+            "source":"language",
+            "name": self.name,
+            "symbols_accepted": self.symbols_accepted,
+            "symbols_proposed_tail": self.symbols_proposed[-20:],
         }
