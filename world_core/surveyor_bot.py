@@ -1,9 +1,17 @@
+# world_core/surveyor_bot.py
+
 from dataclasses import dataclass, field
 from typing import Dict, Tuple, Any, List
 
 
 @dataclass
 class SurveyorBot:
+    """
+    3D geometry surveyor.
+    Builds a voxel volume and surface map.
+    No cognition. No interaction. No language.
+    """
+
     name: str
     center_xyz: Tuple[float, float, float]
     extent_m: float = 10.0
@@ -16,7 +24,10 @@ class SurveyorBot:
 
     volume: List[List[List[int]]] = field(default_factory=list)
     surface_volume: List[List[List[int]]] = field(default_factory=list)
+
     last_snapshot: Dict[str, Any] = field(default_factory=dict)
+
+    # -------------------------------------------------
 
     def _is_solid(self, world, x, y, z) -> bool:
         for place in world.places.values():
@@ -27,6 +38,8 @@ class SurveyorBot:
                     if room.contains_world_point((x, y, z)):
                         return True
         return False
+
+    # -------------------------------------------------
 
     def observe(self, world):
         if not self.active:
@@ -45,9 +58,6 @@ class SurveyorBot:
         nx = int((2 * r) / step)
         ny = nx
         nz = int(h / step)
-        nx = max(nx, 1)
-        ny = max(ny, 1)
-        nz = max(nz, 1)
 
         vol = [[[0 for _ in range(nx)] for __ in range(ny)] for ___ in range(nz)]
 
@@ -60,38 +70,42 @@ class SurveyorBot:
                     if self._is_solid(world, x, y, z):
                         vol[iz][iy][ix] = 1
 
+        # Extract surface voxels
         surf = [[[0 for _ in range(nx)] for __ in range(ny)] for ___ in range(nz)]
-        if nz >= 3 and nx >= 3 and ny >= 3:
-            for z in range(1, nz - 1):
-                for y in range(1, ny - 1):
-                    for x in range(1, nx - 1):
-                        if vol[z][y][x] == 1:
-                            if (
-                                vol[z-1][y][x] == 0 or vol[z+1][y][x] == 0 or
-                                vol[z][y-1][x] == 0 or vol[z][y+1][x] == 0 or
-                                vol[z][y][x-1] == 0 or vol[z][y][x+1] == 0
-                            ):
-                                surf[z][y][x] = 1
-
-        frame = getattr(world.space, "frame_counter", self.frames)
+        for z in range(1, nz - 1):
+            for y in range(1, ny - 1):
+                for x in range(1, nx - 1):
+                    if vol[z][y][x] == 1:
+                        if (
+                            vol[z-1][y][x] == 0 or vol[z+1][y][x] == 0 or
+                            vol[z][y-1][x] == 0 or vol[z][y+1][x] == 0 or
+                            vol[z][y][x-1] == 0 or vol[z][y][x+1] == 0
+                        ):
+                            surf[z][y][x] = 1
 
         self.volume = vol
         self.surface_volume = surf
+
         self.last_snapshot = {
             "source": "surveyor",
+            "entity": self.name,
             "name": self.name,
-            "frame": frame,
+            "frame": world.frame,
             "active": self.active,
             "center_xyz": self.center_xyz,
             "resolution_m": step,
+            "extent_m": r,
             "volume_shape": (nz, ny, nx),
-            "volume": vol,
-            "surface_volume": surf,
+            "solid_voxels": sum(sum(sum(row) for row in plane) for plane in vol),
+            "surface_voxels": sum(sum(sum(row) for row in plane) for plane in surf),
         }
+
+    # -------------------------------------------------
 
     def snapshot(self) -> Dict[str, Any]:
         return self.last_snapshot or {
             "source": "surveyor",
+            "entity": self.name,
             "name": self.name,
             "active": self.active,
             "frame": self.frames,
