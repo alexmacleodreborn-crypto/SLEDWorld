@@ -1,48 +1,46 @@
-import random
+# world_core/world_space.py
 
+from dataclasses import dataclass
+
+@dataclass
+class WorldWeather:
+    # simple toggles; no “time”, only state + frame
+    sun_level: float = 0.6      # 0..1
+    rain: bool = False
+    snow: bool = False
+    wind: float = 0.2           # 0..1
+    cloud: float = 0.2          # 0..1
 
 class WorldSpace:
     """
-    Global environment: weather-like fields.
-    No agent knows 'time' – only coordinates and current state.
+    Global environment. Frame-based. No cognitive meaning.
     """
-
     def __init__(self):
         self.frame_counter = 0
+        self.weather = WorldWeather()
 
-        # simple toggles (can later be made cyclic)
-        self.sunlight = 1.0   # 0..1
-        self.wind = 0.2       # 0..1
-        self.rain = False
-        self.snow = False
-        self.temperature_c = 12.0
+    def tick(self, frame: int):
+        self.frame_counter = int(frame)
 
-    def tick(self):
-        self.frame_counter += 1
+        # simple cyclic-ish variation without time meaning
+        # (just a deterministic state evolution)
+        f = self.frame_counter
+        self.weather.sun_level = 0.3 + 0.3 * ((f % 100) / 100.0)  # 0.3..0.6
+        self.weather.cloud = 0.1 + 0.5 * (((f * 7) % 100) / 100.0)
+        self.weather.wind = 0.1 + 0.6 * (((f * 13) % 100) / 100.0)
 
-        # mild drift
-        self.wind = max(0.0, min(1.0, self.wind + random.uniform(-0.02, 0.02)))
-        self.temperature_c += random.uniform(-0.05, 0.05)
-
-        # occasional weather flips
-        if self.frame_counter % 120 == 0:
-            self.rain = random.random() < 0.25
-            self.snow = (not self.rain) and (random.random() < 0.08)
-
-        # sunlight depends on rain/snow
-        base = 1.0
-        if self.rain:
-            base *= 0.6
-        if self.snow:
-            base *= 0.75
-        self.sunlight = base
+        # occasional toggles (rare)
+        self.weather.rain = ((f % 240) > 200)
+        self.weather.snow = ((f % 500) > 470)
 
     def snapshot(self):
         return {
-            "frame": self.frame_counter,
-            "sunlight": round(self.sunlight, 3),
-            "wind": round(self.wind, 3),
-            "rain": bool(self.rain),
-            "snow": bool(self.snow),
-            "temperature_c": round(self.temperature_c, 2),
+            "frame_counter": self.frame_counter,
+            "weather": {
+                "sun_level": round(self.weather.sun_level, 3),
+                "cloud": round(self.weather.cloud, 3),
+                "wind": round(self.weather.wind, 3),
+                "rain": self.weather.rain,
+                "snow": self.weather.snow,
+            }
         }
