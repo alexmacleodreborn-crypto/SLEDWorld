@@ -1,75 +1,63 @@
 # world_core/architect_bot.py
 
-from typing import Dict, Any, List
-
-
 class ArchitectBot:
     """
-    Converts verified structures into blueprints.
-
-    - No world access
-    - No perception
-    - No language
-    - Pure abstraction
+    Pattern recogniser.
+    Reads geometry + repetition from ledger.
+    Proposes structural symbols (brick, wall, room).
     """
 
     def __init__(self):
-        self.blueprints: List[Dict[str, Any]] = []
-        self.frame_counter = 0
+        self.name = "Architect"
+        self.known_patterns = set()
+        self.proposals = []
 
-    # -------------------------------------------------
-    # Ingest confirmed structures
-    # -------------------------------------------------
+        # thresholds
+        self.min_surface_repeats = 12
+        self.min_wall_planes = 4
 
-    def ingest(self, reception_snapshot: Dict[str, Any]):
-        self.frame_counter += 1
+    def review(self, ledger):
+        if not ledger.events:
+            return
 
-        rooms = reception_snapshot.get("rooms", [])
-        for room in rooms:
-            blueprint = self._create_blueprint(room)
-            if blueprint:
-                self.blueprints.append(blueprint)
+        # --- Detect BRICK-like repetition ---
+        surface_hits = 0
+        for e in ledger.events[-300:]:
+            if e.get("source") == "surveyor":
+                surf = e.get("surface_volume")
+                if surf:
+                    surface_hits += 1
 
-    # -------------------------------------------------
-    # Blueprint generation
-    # -------------------------------------------------
+        if surface_hits >= self.min_surface_repeats:
+            self._propose("BRICK_PATTERN", surface_hits)
 
-    def _create_blueprint(self, room: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Turn a room definition into a construction plan.
-        """
+        # --- Detect WALL planes ---
+        wall_votes = 0
+        for e in ledger.events[-300:]:
+            if e.get("source") == "surveyor":
+                shape = e.get("volume_shape")
+                if shape and shape[2] > 4:
+                    wall_votes += 1
 
-        cluster = room.get("cluster_key")
-        if not cluster:
-            return {}
+        if wall_votes >= self.min_wall_planes:
+            self._propose("WALL_STRUCTURE", wall_votes)
 
-        blueprint = {
-            "type": "blueprint",
-            "structure": "room",
-            "id": room["id"],
-            "floor": room.get("floor", 0),
-            "anchor_cluster": cluster,
-            "components": [
-                {"element": "wall", "count": 4},
-                {"element": "floor", "count": 1},
-                {"element": "ceiling", "count": 1},
-            ],
-            "constraints": {
-                "enclosure": True,
-                "planar": True,
-            },
-            "frame": self.frame_counter,
+    def _propose(self, symbol, evidence):
+        if symbol in self.known_patterns:
+            return
+
+        proposal = {
+            "source": "architect",
+            "symbol": symbol,
+            "evidence": evidence,
+            "status": "proposed",
         }
+        self.known_patterns.add(symbol)
+        self.proposals.append(proposal)
 
-        return blueprint
-
-    # -------------------------------------------------
-    # Snapshot
-    # -------------------------------------------------
-
-    def snapshot(self) -> Dict[str, Any]:
+    def snapshot(self):
         return {
             "source": "architect",
-            "frames": self.frame_counter,
-            "blueprints": self.blueprints[-5:],
+            "known_patterns": list(self.known_patterns),
+            "proposals": self.proposals[-10:],
         }
