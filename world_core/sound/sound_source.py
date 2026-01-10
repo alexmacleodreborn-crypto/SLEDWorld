@@ -1,11 +1,7 @@
-# world_core/sound/sound_source.py
-
-from __future__ import annotations
-
 class SoundSource:
     def __init__(self, name, position, base_level=0.6):
         self.name = name
-        self.position = position
+        self.position = tuple(position)
         self.base_level = float(base_level)
         self.active = False
 
