@@ -1,3 +1,5 @@
+# world_core.scout.py
+
 import math
 
 
