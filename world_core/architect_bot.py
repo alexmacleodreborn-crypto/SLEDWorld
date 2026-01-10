@@ -1,31 +1,75 @@
 # world_core/architect_bot.py
 
+from typing import Dict, Any, List
+
+
 class ArchitectBot:
     """
-    Reads schematics/ledger and groups repeating surface motifs into structures.
-    Stage-0: heuristic pattern grouping only.
+    Converts verified structures into blueprints.
+
+    - No world access
+    - No perception
+    - No language
+    - Pure abstraction
     """
 
-    def __init__(self, name="Architect-1"):
-        self.name = name
-        self.last_snapshot = {"source": "architect", "name": self.name, "structures": []}
+    def __init__(self):
+        self.blueprints: List[Dict[str, Any]] = []
+        self.frame_counter = 0
 
-    def observe(self, world):
-        ledger = getattr(world, "salience_investigator", None)
-        entries = getattr(ledger, "ledger", []) if ledger else []
+    # -------------------------------------------------
+    # Ingest confirmed structures
+    # -------------------------------------------------
 
-        # Placeholder: detect repeated 'surveyor' or 'shape' mentions
-        shape_events = [e for e in entries if isinstance(e, dict) and (e.get("focus") == "shape" or e.get("source") == "surveyor")]
+    def ingest(self, reception_snapshot: Dict[str, Any]):
+        self.frame_counter += 1
 
-        self.last_snapshot = {
-            "source": "architect",
-            "name": self.name,
-            "frame": getattr(world, "frame", None),
-            "shape_events_seen": len(shape_events),
-            "structures": [
-                {"label": "candidate_wall", "confidence": 0.3 + min(len(shape_events) / 1000.0, 0.6)}
-            ] if shape_events else []
+        rooms = reception_snapshot.get("rooms", [])
+        for room in rooms:
+            blueprint = self._create_blueprint(room)
+            if blueprint:
+                self.blueprints.append(blueprint)
+
+    # -------------------------------------------------
+    # Blueprint generation
+    # -------------------------------------------------
+
+    def _create_blueprint(self, room: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Turn a room definition into a construction plan.
+        """
+
+        cluster = room.get("cluster_key")
+        if not cluster:
+            return {}
+
+        blueprint = {
+            "type": "blueprint",
+            "structure": "room",
+            "id": room["id"],
+            "floor": room.get("floor", 0),
+            "anchor_cluster": cluster,
+            "components": [
+                {"element": "wall", "count": 4},
+                {"element": "floor", "count": 1},
+                {"element": "ceiling", "count": 1},
+            ],
+            "constraints": {
+                "enclosure": True,
+                "planar": True,
+            },
+            "frame": self.frame_counter,
         }
 
-    def snapshot(self):
-        return self.last_snapshot
+        return blueprint
+
+    # -------------------------------------------------
+    # Snapshot
+    # -------------------------------------------------
+
+    def snapshot(self) -> Dict[str, Any]:
+        return {
+            "source": "architect",
+            "frames": self.frame_counter,
+            "blueprints": self.blueprints[-5:],
+        }
